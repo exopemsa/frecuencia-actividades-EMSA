@@ -1,0 +1,1780 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#f4f7fa">
+  <title>Control de avance de sondajes</title>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f7fa;
+      --panel: #ffffff;
+      --panel-2: #f7fafc;
+      --line: #d7e1e8;
+      --text: #183243;
+      --muted: #647c8b;
+      --orange: #e97824;
+      --orange-2: #b9560b;
+      --teal: #0d9488;
+      --blue: #397bbb;
+      --danger: #d94b4b;
+      --shadow: 0 14px 38px rgba(50, 76, 94, .12);
+    }
+
+    * { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      min-width: 320px;
+      min-height: 100vh;
+      margin: 0;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 10% -5%, rgba(13, 148, 136, .09), transparent 28rem),
+        radial-gradient(circle at 90% 0%, rgba(233, 120, 36, .09), transparent 24rem),
+        var(--bg);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    button, input, select { font: inherit; }
+    button, summary, label { -webkit-tap-highlight-color: transparent; }
+
+    .shell { width: min(1600px, 100%); margin: 0 auto; padding: 24px; }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      margin-bottom: 22px;
+    }
+
+    .brand { display: flex; align-items: center; gap: 14px; }
+
+    .brand-mark {
+      display: grid;
+      place-items: center;
+      width: 46px;
+      height: 46px;
+      border: 1px solid rgba(255, 159, 67, .45);
+      border-radius: 14px;
+      color: var(--orange);
+      background: rgba(255, 159, 67, .1);
+      box-shadow: inset 0 1px rgba(255,255,255,.08);
+    }
+
+    h1 { margin: 0; font-size: clamp(1.35rem, 2.4vw, 2rem); letter-spacing: -.035em; }
+    .eyebrow { margin: 0 0 4px; color: var(--orange-2); font-size: .7rem; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; }
+    .subtitle { margin: 4px 0 0; color: var(--muted); font-size: .88rem; }
+
+    .file-status {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      max-width: 440px;
+      padding: 9px 12px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--muted);
+      background: rgba(255,255,255,.9);
+      font-size: .78rem;
+    }
+
+    .file-status .dot { width: 8px; height: 8px; border-radius: 50%; background: #60798b; flex: 0 0 auto; }
+    .file-status.ready .dot { background: var(--teal); box-shadow: 0 0 12px rgba(39,212,197,.65); }
+    .file-status.error .dot { background: var(--danger); }
+    .file-status span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: linear-gradient(145deg, rgba(255,255,255,.98), rgba(247,250,252,.98));
+      box-shadow: var(--shadow);
+    }
+
+    .loader {
+      position: relative;
+      display: grid;
+      place-items: center;
+      min-height: 330px;
+      padding: 34px;
+      overflow: hidden;
+      text-align: center;
+    }
+
+    .loader::after {
+      content: "";
+      position: absolute;
+      width: 460px;
+      height: 460px;
+      border: 1px solid rgba(61,95,116,.08);
+      border-radius: 50%;
+      box-shadow: 0 0 0 70px rgba(61,95,116,.025), 0 0 0 140px rgba(61,95,116,.018);
+      pointer-events: auto;
+    }
+
+    .loader-content { position: relative; z-index: 1; max-width: 580px; }
+    .upload-icon { margin: 0 auto 18px; color: var(--orange); }
+    .loader h2 { margin: 0 0 9px; font-size: 1.45rem; }
+    .loader p { margin: 0 auto 22px; color: var(--muted); line-height: 1.65; }
+
+    .primary-button, .secondary-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      min-height: 42px;
+      padding: 0 17px;
+      border-radius: 10px;
+      font-weight: 750;
+      cursor: default;
+      transition: transform .16s ease, border-color .16s ease, background .16s ease;
+    }
+
+    .primary-button { border: 1px solid #dd6c1d; color: #ffffff; background: linear-gradient(135deg, #ef944e, var(--orange)); }
+    .secondary-button { border: 1px solid var(--line); color: var(--text); background: var(--panel-2); }
+    .primary-button:hover, .secondary-button:hover { transform: translateY(-1px); }
+    .primary-button:focus-visible, .secondary-button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+    input[type=file] { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+
+    .loader-message { min-height: 20px; margin-top: 16px !important; color: var(--orange-2) !important; font-size: .82rem; }
+    .loader.dragging { border-color: var(--teal); background: rgba(39,212,197,.07); }
+
+    #dashboard[hidden], #uploadPanel[hidden] { display: none; }
+
+    .tabs {
+      display: flex;
+      gap: 6px;
+      padding: 5px;
+      margin-bottom: 16px;
+      border: 1px solid var(--line);
+      border-radius: 13px;
+      background: rgba(255,255,255,.88);
+      width: fit-content;
+    }
+
+    .tab-button {
+      min-height: 39px;
+      padding: 0 17px;
+      border: 1px solid transparent;
+      border-radius: 9px;
+      color: var(--muted);
+      background: transparent;
+      font-weight: 750;
+      cursor: pointer;
+    }
+
+    .tab-button:hover { color: var(--text); background: #f1f5f8; }
+    .tab-button.active { border-color: rgba(233,120,36,.34); color: #a94a08; background: #fff1e6; }
+    .tab-panel[hidden] { display: none; }
+
+    .main-placeholder {
+      display: grid;
+      place-items: center;
+      min-height: 420px;
+      padding: 40px;
+      text-align: center;
+    }
+
+    .main-placeholder > div { max-width: 560px; }
+    .main-placeholder svg { color: var(--orange); opacity: .9; }
+    .main-placeholder h2 { margin: 18px 0 8px; font-size: 1.4rem; }
+    .main-placeholder p { margin: 0; color: var(--muted); line-height: 1.65; }
+
+    .toolbar {
+      position: relative;
+      z-index: 1;
+      padding: 16px;
+      margin-bottom: 16px;
+      background: #ffffff;
+    }
+
+    .filter-grid {
+      display: grid;
+      grid-template-columns: minmax(150px, 1.05fr) minmax(155px, 1fr) minmax(155px, 1fr) minmax(155px, 1fr) 140px 140px auto;
+      gap: 10px;
+      align-items: end;
+    }
+
+    .filter-grid.well-filter-grid { grid-template-columns: minmax(170px, .7fr) minmax(320px, 1.5fr) minmax(260px, 1fr) auto; }
+
+    .report-context {
+      display: flex;
+      align-items: center;
+      min-height: 41px;
+      padding: 0 12px;
+      border: 1px solid rgba(255,159,67,.28);
+      border-radius: 9px;
+      color: #a94a08;
+      background: #fff6ee;
+      font-weight: 850;
+    }
+
+    .checkbox-filter {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 7px;
+      min-height: 41px;
+      padding: 5px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: #ffffff;
+    }
+
+    .checkbox-option {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 29px;
+      padding: 0 9px;
+      border: 1px solid #ccd9e1;
+      border-radius: 7px;
+      color: #294658;
+      background: #f8fafc;
+      font-size: .73rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .checkbox-option:has(input:checked) { border-color: rgba(13,148,136,.48); color: #0b6f67; background: #e8f7f5; }
+    .checkbox-option.all:has(input:checked) { border-color: rgba(233,120,36,.45); color: #a94a08; background: #fff1e6; }
+    .checkbox-option input { margin: 0; accent-color: var(--teal); }
+
+    .buttonbox {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(72px, 1fr));
+      min-height: 41px;
+      padding: 4px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: #f8fafc;
+    }
+
+    .buttonbox button {
+      min-height: 31px;
+      padding: 0 9px;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      color: var(--muted);
+      background: transparent;
+      font-size: .72rem;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .buttonbox button:hover { color: var(--text); }
+    .buttonbox button.active { border-color: rgba(57,123,187,.42); color: #245f98; background: #eaf3fb; }
+
+    .field { min-width: 0; }
+    .field > label, .field-label { display: block; margin: 0 0 6px; color: var(--muted); font-size: .69rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+
+    select, input[type=date], details.multi > summary {
+      width: 100%;
+      min-height: 41px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      color: var(--text);
+      background: #ffffff;
+    }
+
+    select, input[type=date] { padding: 0 10px; }
+    select option { background: #ffffff; }
+    input[type=date] { color-scheme: light; }
+
+    details.multi { position: relative; }
+    details.multi > summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 0 11px;
+      list-style: none;
+      cursor: pointer;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+
+    details.multi > summary::-webkit-details-marker { display: none; }
+    details.multi > summary::after { content: "⌄"; color: var(--muted); }
+    details.multi[open] > summary { border-color: #3e6075; }
+
+    .multi-panel {
+      position: absolute;
+      top: calc(100% + 7px);
+      left: 0;
+      z-index: 30;
+      width: max(100%, 245px);
+      max-height: 290px;
+      overflow: auto;
+      padding: 8px;
+      border: 1px solid #c9d7e0;
+      border-radius: 11px;
+      background: #ffffff;
+      box-shadow: 0 18px 45px rgba(50,76,94,.18);
+    }
+
+    .multi-option { display: flex; align-items: center; gap: 9px; padding: 8px; border-radius: 7px; color: #294658; font-size: .82rem; cursor: pointer; }
+    .multi-option:hover { background: #f1f5f8; }
+    .multi-option.all { padding-bottom: 10px; margin-bottom: 4px; border-bottom: 1px solid var(--line); color: var(--orange-2); font-weight: 750; }
+    .multi-option input { accent-color: var(--orange); }
+
+    .toolbar-actions { display: flex; gap: 8px; }
+    .icon-button { width: 41px; height: 41px; padding: 0; }
+
+    .activity-toolbar {
+      display: grid;
+      grid-template-columns: minmax(190px, .65fr) minmax(0, 2.35fr);
+      gap: 14px;
+      align-items: end;
+      padding-top: 14px;
+      margin-top: 14px;
+      border-top: 1px solid var(--line);
+    }
+
+    .activity-toolbar-copy strong { display: block; color: var(--text); font-size: .83rem; }
+    .activity-toolbar-copy span { display: block; margin-top: 4px; color: var(--muted); font-size: .7rem; line-height: 1.45; }
+    .activity-select-grid { display: grid; grid-template-columns: repeat(3, minmax(180px, 1fr)); gap: 10px; }
+    .activity-select-grid select { text-overflow: ellipsis; cursor: pointer; }
+
+    .kpis {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(120px, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .kpi { position: relative; min-height: 110px; padding: 17px; overflow: hidden; }
+    .kpi::after { content: ""; position: absolute; right: -18px; bottom: -30px; width: 90px; height: 90px; border-radius: 50%; background: var(--kpi-color, var(--orange)); opacity: .07; }
+    .kpi-label { color: var(--muted); font-size: .72rem; font-weight: 750; letter-spacing: .055em; text-transform: uppercase; }
+    .kpi-value { margin-top: 10px; font-size: clamp(1.35rem, 2.4vw, 2.05rem); font-weight: 800; letter-spacing: -.04em; }
+    .kpi-foot { margin-top: 4px; color: var(--muted); font-size: .73rem; }
+
+    .section-card { margin-bottom: 16px; overflow: hidden; }
+    .section-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 18px 20px; border-bottom: 1px solid var(--line); }
+    .section-head h2 { margin: 0; font-size: 1rem; }
+    .section-head p { margin: 5px 0 0; color: var(--muted); font-size: .77rem; }
+
+    .legend { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 13px; color: var(--muted); font-size: .72rem; }
+    .legend-item { display: inline-flex; align-items: center; gap: 6px; }
+    #activityLegend { display: contents; }
+    .legend-line { width: 17px; height: 5px; border-radius: 5px; background: linear-gradient(90deg, var(--orange), var(--teal)); }
+    .legend-event { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: #fff3d6; color: #744811; font-size: 11px; }
+    .legend-tool { background: #dceeff; color: #18517f; }
+
+    .wells-wrap { padding: 18px; }
+    .wells-grid {
+      display: flex;
+      gap: 14px;
+      padding: 10px 4px 5px;
+      overflow-x: auto;
+      overscroll-behavior-inline: contain;
+      scroll-snap-type: inline proximity;
+      scroll-behavior: auto;
+      scrollbar-width: none;
+    }
+
+    .wells-grid::-webkit-scrollbar { display: none; }
+
+    .well-scrollbar {
+      height: 15px;
+      margin-bottom: 5px;
+      overflow-x: auto;
+      overflow-y: hidden;
+      scrollbar-color: #9eb3c1 #edf2f5;
+      scrollbar-width: thin;
+    }
+
+    .well-scrollbar::-webkit-scrollbar { height: 11px; }
+    .well-scrollbar::-webkit-scrollbar-track { border-radius: 10px; background: #edf2f5; }
+    .well-scrollbar::-webkit-scrollbar-thumb { border: 2px solid #edf2f5; border-radius: 10px; background: #9eb3c1; }
+    .well-scrollbar-track { height: 1px; }
+
+    .well-card {
+      min-width: 0;
+      flex: 0 0 calc((100% - 28px) / 3);
+      padding: 15px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(255,255,255,.96);
+      scroll-snap-align: start;
+      cursor: default;
+      transition: border-color .18s ease, box-shadow .18s ease, background .18s ease, transform .18s ease;
+    }
+
+    .well-card:hover { border-color: #9bb0bd; }
+    .well-card:focus-visible { outline: 2px solid var(--teal); outline-offset: 3px; }
+    .well-card.is-selected {
+      border-color: #66e1d5;
+      background: linear-gradient(160deg, #edfafa, #ffffff);
+      box-shadow: 0 0 0 3px rgba(39,212,197,.13), 0 0 28px rgba(39,212,197,.2), var(--shadow);
+      transform: none;
+    }
+
+    .well-card.is-finished.is-selected { border-color: #78e3a0; box-shadow: 0 0 0 3px rgba(74,222,128,.14), 0 0 30px rgba(34,197,94,.22), var(--shadow); }
+
+    .well-card.is-finished { border-color: rgba(36,155,83,.35); background: linear-gradient(160deg, #effaf2, #ffffff); }
+    .well-card.is-finished .well-total { color: #17763a; }
+
+    .well-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+    .well-name { margin: 0; font-size: .98rem; font-weight: 850; overflow-wrap: anywhere; }
+    .well-title-row { display: flex; align-items: baseline; flex-wrap: wrap; gap: 7px 10px; }
+    .well-focus-trigger { display: flex; align-items: baseline; flex-wrap: wrap; gap: 7px 10px; max-width: 100%; padding: 3px 5px; margin: -3px -5px; border: 0; border-radius: 7px; color: inherit; background: transparent; font: inherit; text-align: left; cursor: zoom-in; }
+    .well-focus-trigger:hover { color: #a94a08; background: #fff1e6; }
+    .well-focus-trigger:focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; }
+    .well-open-glyph { color: var(--orange); font-size: .74rem; font-weight: 900; }
+    .well-equipment { color: #17384b; font-size: .9rem; font-weight: 850; overflow-wrap: anywhere; }
+    .well-equipment::before { content: "·"; margin-right: 9px; color: var(--orange); }
+    .well-meta { margin-top: 4px; color: var(--muted); font-size: .7rem; }
+    .well-total { flex: 0 0 auto; color: var(--orange-2); font-size: .84rem; font-weight: 800; }
+    .well-badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 7px; margin-top: 6px; border: 1px solid rgba(36,155,83,.35); border-radius: 999px; color: #17763a; background: #eaf8ee; font-size: .62rem; font-weight: 800; letter-spacing: .055em; text-transform: uppercase; }
+    .well-badge.is-active { border-color: rgba(233,120,36,.35); color: #ae510d; background: #fff1e6; }
+    .well-duration { display: grid; grid-template-columns: repeat(2, 1fr); gap: 7px; padding: 9px; margin-top: 6px; border: 1px solid #dce5eb; border-radius: 9px; background: #f8fafc; }
+    .well-duration div { min-width: 0; text-align: center; }
+    .well-duration span { display: block; color: var(--muted); font-size: .58rem; font-weight: 750; letter-spacing: .05em; text-transform: uppercase; }
+    .well-duration strong { display: block; margin-top: 3px; color: #264557; font-size: .73rem; white-space: nowrap; }
+    .well-card.is-finished .well-duration strong { color: #247545; }
+    .well-svg { display: block; width: 100%; height: 1140px; overflow: visible; }
+    .depth-label { fill: #667f8f; font-size: 10px; }
+    .axis-line { stroke: #d8e2e8; stroke-width: 1; stroke-dasharray: 3 5; }
+    .earth-zone, .earth-texture, .earth-strata, .surface-soil, .surface-grass { pointer-events: none; }
+    .earth-zone { opacity: .62; }
+    .earth-texture { opacity: .26; }
+    .earth-strata { fill: none; stroke: #a7794d; stroke-width: 1.2; stroke-dasharray: 13 10; opacity: .16; }
+    .surface-soil { fill: none; stroke: #9a704a; stroke-width: 3.4; stroke-linecap: round; opacity: .7; }
+    .surface-grass { fill: none; stroke: #6f944f; stroke-width: 2.2; stroke-linecap: round; opacity: .82; }
+    .bore-bg { stroke: #d7e1e7; stroke-width: 28; stroke-linecap: round; }
+    .bore-edge { fill: none; stroke: #829aa9; stroke-width: 1; opacity: .55; }
+    .segment { stroke: rgba(38,69,87,.3); stroke-width: .65; shape-rendering: crispEdges; cursor: crosshair; transition: stroke-width .15s ease, filter .15s ease; }
+    .segment:hover { stroke: rgba(255,255,255,.96); stroke-width: 2.4; filter: brightness(1.08) saturate(1.12); }
+    .pause-hit { cursor: help; }
+    .pause-hit-area { fill: none; stroke: transparent; stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; pointer-events: stroke; cursor: help; }
+    .pause-zigzag { fill: none; stroke: #dc2626; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; filter: drop-shadow(0 .4px .4px rgba(127,29,29,.22)); pointer-events: none; }
+    .event-hit { cursor: help; }
+    .event-ring { stroke-width: 2; }
+    .event-text { font-size: 12px; font-weight: 900; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+    .event-count { fill: #ffffff; font-size: 7px; font-weight: 900; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+    .date-caption { fill: #91a7b6; font-size: 9px; text-anchor: middle; }
+
+    .well-nav { display: flex; justify-content: flex-end; gap: 7px; margin-top: 10px; }
+    .well-nav button { width: 34px; height: 34px; padding: 0; border: 1px solid var(--line); border-radius: 8px; color: var(--text); background: #ffffff; cursor: pointer; }
+    .well-nav button:hover { border-color: #9bb0bd; background: #f2f6f8; }
+
+    .empty-state { padding: 46px 20px; text-align: center; color: var(--muted); }
+    .empty-state strong { display: block; margin-bottom: 7px; color: var(--text); }
+
+    .table-tools { display: flex; align-items: center; gap: 9px; }
+    .table-count { color: var(--muted); font-size: .74rem; white-space: nowrap; }
+    .table-scroll { max-height: 560px; overflow: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: .78rem; }
+    th { position: sticky; top: 0; z-index: 2; padding: 11px 13px; color: #587080; background: #eef3f6; text-align: left; font-size: .66rem; letter-spacing: .07em; text-transform: uppercase; }
+    td { padding: 12px 13px; border-top: 1px solid #dce5eb; vertical-align: top; line-height: 1.45; }
+    tbody tr:hover { background: #f7fafc; }
+    .date-cell { white-space: nowrap; color: #294658; font-weight: 700; }
+    .hole-cell { color: var(--orange-2); font-weight: 750; }
+    .comment-cell { min-width: 260px; white-space: pre-line; color: #405d6e; }
+    .no-comment { color: #879ba7; }
+
+    .notice { display: flex; gap: 9px; padding: 11px 14px; margin-top: 12px; border: 1px solid rgba(233,120,36,.25); border-radius: 10px; color: #9b4c15; background: #fff7f0; font-size: .76rem; line-height: 1.5; }
+
+    .tooltip {
+      position: fixed;
+      z-index: 100;
+      width: min(370px, calc(100vw - 24px));
+      max-height: min(76vh, 680px);
+      overflow-y: auto;
+      padding: 11px 12px;
+      border: 1px solid #c3d1da;
+      border-radius: 10px;
+      color: #203e50;
+      background: rgba(255,255,255,.98);
+      box-shadow: 0 14px 38px rgba(48,74,91,.22);
+      font-size: .75rem;
+      line-height: 1.5;
+      pointer-events: none;
+      transform: translate(12px, 12px);
+    }
+
+    .tooltip[hidden] { display: none; }
+    .tooltip-title { margin-bottom: 5px; color: #a94a08; font-weight: 800; }
+    .tooltip-row { display: flex; justify-content: space-between; gap: 14px; }
+    .tooltip-row span:first-child { color: var(--muted); }
+    .tooltip-row b { text-align: right; overflow-wrap: anywhere; }
+    .tooltip-comment { padding-top: 7px; margin-top: 7px; border-top: 1px solid var(--line); color: #405d6e; }
+    .tooltip-event-list { display: grid; gap: 8px; padding-top: 8px; margin-top: 8px; border-top: 1px solid var(--line); }
+    .tooltip-event-item { padding: 8px; border: 1px solid #d7e1e8; border-radius: 8px; background: #f8fafc; }
+    .tooltip-event-head { margin-bottom: 5px; color: #397bbb; font-weight: 850; }
+    .tooltip-event-item .tooltip-comment { font-size: .72rem; }
+
+    body.focus-open { overflow: hidden; }
+    .well-focus-view[hidden] { display: none; }
+    .well-focus-view {
+      position: fixed;
+      inset: 0;
+      z-index: 80;
+      display: grid;
+      grid-template-columns: clamp(250px, 22vw, 330px) minmax(0, 1fr);
+      color: var(--text);
+      background: #eef3f6;
+    }
+    .well-focus-sidebar {
+      position: relative;
+      z-index: 2;
+      overflow-y: auto;
+      padding: 22px 18px;
+      border-right: 1px solid var(--line);
+      background: #ffffff;
+      box-shadow: 8px 0 30px rgba(50,76,94,.1);
+    }
+    .well-focus-sidebar-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding-bottom: 16px; margin-bottom: 18px; border-bottom: 1px solid var(--line); }
+    .well-focus-sidebar-head h2 { margin: 3px 0 3px; font-size: 1.05rem; }
+    .well-focus-sidebar-head p { margin: 0; color: var(--muted); font-size: .75rem; line-height: 1.45; }
+    .well-focus-close { flex: 0 0 auto; width: 35px; height: 35px; padding: 0; border: 1px solid var(--line); border-radius: 9px; color: #405d6e; background: #ffffff; font-size: 1.15rem; cursor: pointer; }
+    .well-focus-close:hover { border-color: #e9a06d; color: #a94a08; background: #fff6ee; }
+    .well-focus-filter-copy { margin-bottom: 13px; }
+    .well-focus-filter-copy strong { display: block; font-size: .85rem; }
+    .well-focus-filter-copy span { display: block; margin-top: 4px; color: var(--muted); font-size: .7rem; line-height: 1.45; }
+    .well-focus-activity-grid { display: grid; gap: 12px; }
+    .well-focus-activity-grid .field { min-width: 0; }
+    .well-focus-activity-grid select { width: 100%; }
+    .well-focus-legend { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding-top: 18px; margin-top: 20px; border-top: 1px solid var(--line); }
+    .well-focus-stage { min-width: 0; overflow: auto; padding: 26px clamp(20px, 4vw, 58px) 60px; }
+    .well-focus-stage-head { display: flex; align-items: center; justify-content: space-between; gap: 18px; max-width: 860px; margin: 0 auto 15px; }
+    .well-focus-stage-head strong { color: #294658; font-size: .85rem; }
+    .well-focus-stage-head span { color: var(--muted); font-size: .72rem; }
+    .well-focus-chart { display: flex; justify-content: center; align-items: flex-start; min-height: 100%; }
+    .well-focus-chart .well-card { width: min(860px, 100%); flex: 0 0 auto; padding: 20px; box-shadow: var(--shadow); }
+    .well-focus-chart .well-card:hover { border-color: var(--line); }
+    .well-focus-chart .well-svg { height: auto; aspect-ratio: 520 / 1400; }
+    .well-focus-chart .well-head { margin-bottom: 12px; }
+    .well-focus-chart .well-name { font-size: 1.15rem; }
+    .well-focus-chart .well-equipment { font-size: 1.02rem; }
+
+    @media (max-width: 1180px) {
+      .filter-grid { grid-template-columns: repeat(3, 1fr); }
+      .filter-grid.well-filter-grid { grid-template-columns: 1fr 1.6fr; }
+      .activity-toolbar { grid-template-columns: 1fr; }
+      .shift-field, .toolbar-actions { grid-column: auto; }
+      .toolbar-actions { justify-content: flex-end; }
+    }
+
+    @media (max-width: 820px) {
+      .shell { padding: 16px; }
+      .topbar { align-items: flex-start; flex-direction: column; }
+      .file-status { max-width: 100%; }
+      .kpis { grid-template-columns: repeat(2, 1fr); }
+      .kpi:last-child { grid-column: 1 / -1; }
+      .section-head { flex-direction: column; }
+      .legend { justify-content: flex-start; }
+      .well-card { flex-basis: 100%; }
+      .well-focus-view { grid-template-columns: minmax(205px, 42vw) minmax(360px, 1fr); }
+      .well-focus-sidebar { padding: 16px 13px; }
+      .well-focus-stage { padding: 18px 16px 46px; }
+    }
+
+    @media (max-width: 620px) {
+      .filter-grid { grid-template-columns: 1fr 1fr; }
+      .filter-grid.well-filter-grid { grid-template-columns: 1fr; }
+      .activity-select-grid { grid-template-columns: 1fr; }
+      .project-field, .equipment-field, .hole-field, .week-field, .context-field, .shift-field { grid-column: 1 / -1; }
+      .toolbar { position: static; }
+      .kpis { grid-template-columns: 1fr 1fr; }
+      .kpi { min-height: 98px; }
+      .well-card { flex-basis: 100%; }
+      .shell { padding: 12px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg width="25" height="25" viewBox="0 0 24 24" fill="none"><path d="M5 3v6.5c0 1.4.6 2.8 1.7 3.7L10 16v5h4v-5l3.3-2.8c1.1-.9 1.7-2.3 1.7-3.7V3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M8 3v6m4-6v9m4-9v6" stroke="currentColor" stroke-width="1.8"/></svg>
+        </div>
+        <div>
+          <p class="eyebrow">Control operacional</p>
+          <h1>Avance de sondajes</h1>
+          <p class="subtitle">Seguimiento cronológico de perforación y eventos operacionales</p>
+        </div>
+      </div>
+      <div class="file-status" id="fileStatus" title="Estado del origen de datos">
+        <span class="dot"></span><span id="fileStatusText">Sin archivo cargado</span>
+      </div>
+    </header>
+
+    <section class="loader card" id="uploadPanel" aria-labelledby="uploadTitle">
+      <div class="loader-content">
+        <svg class="upload-icon" width="52" height="52" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 15.5v3A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5v-3M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <h2 id="uploadTitle">Carga el reporte de perforación</h2>
+        <p>Selecciona o arrastra aquí un archivo <strong>EMSA_ReportDrilling_….xlsx</strong>. Se procesarán las hojas <strong>Perforación</strong> y <strong>Detalles</strong>.</p>
+        <label class="primary-button" for="fileInput">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M4 7.5A1.5 1.5 0 0 1 5.5 6H10l2 2h6.5A1.5 1.5 0 0 1 20 9.5v8a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5v-10Z" stroke="currentColor" stroke-width="1.8"/></svg>
+          Seleccionar Excel
+        </label>
+        <input id="fileInput" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+        <p class="loader-message" id="loaderMessage" role="status"></p>
+      </div>
+    </section>
+
+    <div id="dashboard" hidden>
+      <nav class="tabs" aria-label="Secciones del dashboard">
+        <button class="tab-button active" type="button" data-tab="mainTab" aria-selected="true">Principal</button>
+        <button class="tab-button" type="button" data-tab="wellsTab" aria-selected="false">Pozos</button>
+      </nav>
+
+      <section class="tab-panel" id="mainTab">
+        <div class="main-placeholder card">
+          <div>
+            <svg width="54" height="54" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 19V9m7 10V5m7 14v-7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M3 19h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            <h2>Panel principal</h2>
+            <p>Esta sección queda preparada para incorporar los indicadores de avance que se definirán en las próximas iteraciones.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-panel" id="wellsTab" hidden>
+        <section class="toolbar card" aria-label="Filtro de pozos">
+          <div class="filter-grid well-filter-grid">
+            <div class="field context-field">
+              <span class="field-label">Proyecto del reporte</span>
+              <div class="report-context" id="reportProject">—</div>
+            </div>
+            <div class="field equipment-field">
+              <span class="field-label">Equipo / sonda</span>
+              <div class="checkbox-filter" id="equipmentFilter" aria-label="Seleccionar equipos"></div>
+            </div>
+            <div class="field shift-field">
+              <span class="field-label">Turnos visibles</span>
+              <div class="buttonbox" id="shiftFilter" role="radiogroup" aria-label="Filtrar por turno">
+                <button type="button" data-shift="A" role="radio" aria-checked="false">Solo turno A</button>
+                <button type="button" data-shift="B" role="radio" aria-checked="false">Solo turno B</button>
+                <button class="active" type="button" data-shift="all" role="radio" aria-checked="true">Ambos turnos</button>
+              </div>
+            </div>
+            <div class="toolbar-actions">
+              <button class="secondary-button icon-button" id="resetFilters" type="button" title="Restablecer filtros de esta pestaña" aria-label="Restablecer filtros de esta pestaña">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M4 4v6h6M20 20v-6h-6M5.1 15A8 8 0 0 0 18 18.4M18.9 9A8 8 0 0 0 6 5.6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+              <label class="secondary-button icon-button" for="fileInput" title="Cargar otro archivo" aria-label="Cargar otro archivo">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 16V4m0 0L8 8m4-4 4 4M5 14v5h14v-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </label>
+            </div>
+          </div>
+          <div class="activity-toolbar">
+            <div class="activity-toolbar-copy">
+              <strong>Actividades en el gráfico</strong>
+              <span>Selecciona hasta tres actividades. Cada selector ocupa una columna visual a ambos lados del pozo.</span>
+            </div>
+            <div class="activity-select-grid" id="activityFilters">
+              <div class="field"><label for="activityFilter1">Actividad 1 · columna interior</label><select id="activityFilter1" data-activity-slot="0"></select></div>
+              <div class="field"><label for="activityFilter2">Actividad 2 · columna media</label><select id="activityFilter2" data-activity-slot="1"></select></div>
+              <div class="field"><label for="activityFilter3">Actividad 3 · columna exterior</label><select id="activityFilter3" data-activity-slot="2"></select></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section-card card">
+          <div class="section-head">
+            <div><h2>Perfil de avance por pozo</h2><p>Avances desde Perforación y actividades seleccionadas desde Detalles. Todos los pozos utilizan la misma escala.</p></div>
+            <div>
+              <div class="legend" aria-label="Leyenda">
+                <span class="legend-item"><i class="legend-line" style="background:linear-gradient(90deg,#fed7aa,#9a3412)"></i> En ejecución</span>
+                <span class="legend-item"><i class="legend-line" style="background:linear-gradient(90deg,#bbf7d0,#14532d)"></i> Finalizado</span>
+                <span id="activityLegend"></span>
+              </div>
+              <div class="well-nav" aria-label="Navegación horizontal de pozos">
+                <button id="wellsPrev" type="button" title="Pozos anteriores" aria-label="Pozos anteriores">←</button>
+                <button id="wellsNext" type="button" title="Pozos siguientes" aria-label="Pozos siguientes">→</button>
+              </div>
+            </div>
+          </div>
+          <div class="wells-wrap" id="wellsContainer"></div>
+        </section>
+
+        <div class="notice" id="dataNotice" hidden></div>
+      </section>
+    </div>
+  </main>
+
+  <section class="well-focus-view" id="wellFocusView" role="dialog" aria-modal="true" aria-labelledby="wellFocusTitle" hidden>
+    <aside class="well-focus-sidebar">
+      <div class="well-focus-sidebar-head">
+        <div>
+          <p class="eyebrow">Vista individual</p>
+          <h2 id="wellFocusTitle">—</h2>
+          <p id="wellFocusEquipment">—</p>
+        </div>
+        <button class="well-focus-close" id="closeWellFocus" type="button" aria-label="Cerrar vista individual" title="Cerrar vista individual">×</button>
+      </div>
+      <div class="well-focus-filter-copy">
+        <strong>Actividades visibles</strong>
+        <span>Puedes modificar hasta tres actividades sin salir del sondaje.</span>
+      </div>
+      <div class="well-focus-activity-grid" id="focusActivityFilters">
+        <div class="field"><label for="focusActivityFilter1">Actividad 1 · columna interior</label><select id="focusActivityFilter1" data-activity-slot="0"></select></div>
+        <div class="field"><label for="focusActivityFilter2">Actividad 2 · columna media</label><select id="focusActivityFilter2" data-activity-slot="1"></select></div>
+        <div class="field"><label for="focusActivityFilter3">Actividad 3 · columna exterior</label><select id="focusActivityFilter3" data-activity-slot="2"></select></div>
+      </div>
+      <div class="well-focus-legend" id="focusActivityLegend" aria-label="Actividades visibles"></div>
+    </aside>
+    <div class="well-focus-stage" id="wellFocusStage">
+      <div class="well-focus-stage-head"><strong>Perfil ampliado del sondaje</strong><span>Desplázate verticalmente o utiliza el zoom del navegador para revisar detalles.</span></div>
+      <div class="well-focus-chart" id="focusedWellContainer"></div>
+    </div>
+  </section>
+
+  <div class="tooltip" id="tooltip" hidden></div>
+
+  <script>
+    (() => {
+      "use strict";
+
+      const REPORT_FILE_PATTERN = /^EMSA_ReportDrilling_.+\.xlsx$/i;
+      const AUTO_REPORT_FILE = "EMSA_ReportDrilling_20260831 (2).xlsx";
+      const DAY_MS = 86400000;
+      const ACTIVITY_CATALOG = [
+        {id:"tool-movement", label:"Movimiento de Herramientas", codes:["5.02"], aliases:["movimiento herramientas"], icon:"↕", color:"#1976d2", soft:"#e3f2fd"},
+        {id:"casing-install", label:"Instalación Casing", codes:["5.09.01"], aliases:["instalacion casing"], icon:"⇩", color:"#7b1fa2", soft:"#f3e5f5"},
+        {id:"casing-rescue", label:"Rescate de Casing", codes:[], aliases:["rescate casing", "rescate de casing"], icon:"⇧", color:"#00897b", soft:"#e0f2f1"},
+        {id:"casing-rotation", label:"Rotación de Casing", codes:["5.09.02"], aliases:["rotacion casing", "rotacion de casing"], icon:"↻", color:"#5e35b1", soft:"#ede7f6"},
+        {id:"tool-rescue", label:"Rescate de herramientas", codes:["5.08"], aliases:["rescate herramientas", "rescate de herramientas"], icon:"⚓", color:"#d97706", soft:"#fff7ed"},
+        {id:"crown-change", label:"Cambio de Corona", codes:[], aliases:[], icon:"♛", color:"#a16207", soft:"#fef9c3"},
+        {id:"structural-repair", label:"Reparación estructural", codes:["12.01.01"], aliases:["reparacion estructural"], icon:"▰", color:"#475569", soft:"#f1f5f9"},
+        {id:"motor-repair", label:"Reparación Motor/mecánica", codes:["12.01.02"], aliases:["reparacion motor mecanica"], icon:"⚙", color:"#c2410c", soft:"#ffedd5"},
+        {id:"electric-repair", label:"Reparación Eléctrica", codes:["12.01.03"], aliases:["reparacion electrica"], icon:"⚡", color:"#ca8a04", soft:"#fef9c3"},
+        {id:"hydraulic-repair", label:"Reparación Sistema Hidráulico", codes:["12.01.04"], aliases:["reparacion sistema hidraulico"], icon:"◈", color:"#0284c7", soft:"#e0f2fe"},
+        {id:"support-repair", label:"Reparación Equipo Apoyo", codes:["12.01.05"], aliases:["reparacion equipo apoyo"], icon:"⛟", color:"#16a34a", soft:"#dcfce7"},
+        {id:"mud-repair", label:"Reparación Sistema Lodo", codes:["12.01.06"], aliases:["reparacion sistema lodo"], icon:"≋", color:"#0f766e", soft:"#ccfbf1"},
+        {id:"corrective-maintenance", label:"Man. Correctiva", codes:["12.01"], aliases:["man correctiva", "mantencion correctiva", "mantenimiento correctivo"], icon:"✚", color:"#dc2626", soft:"#fee2e2"},
+        {id:"preventive-maintenance", label:"Man. Preventiva", codes:["12.02"], aliases:["man preventiva", "mantencion preventiva", "mantenimiento preventivo"], icon:"◷", color:"#2563eb", soft:"#dbeafe"},
+        {id:"wait-supplies", label:"Espera Insumos", codes:[], aliases:["espera insumos", "espera de insumos"], icon:"▣", color:"#9333ea", soft:"#f3e8ff"},
+        {id:"wait-parts", label:"Espera repuestos", codes:["10.04"], aliases:["espera repuestos", "espera de repuestos"], icon:"⎔", color:"#ea580c", soft:"#ffedd5"},
+        {id:"wait-personnel", label:"Espera de personal", codes:["10.13"], aliases:["espera personal", "espera de personal", "espera de persoal"], icon:"♟", color:"#be123c", soft:"#ffe4e6"},
+        {id:"wait-instructions", label:"Espera instrucciones EECC", codes:["10.07"], aliases:["espera instrucciones eecc", "espera de instrucciones eecc"], icon:"☷", color:"#4f46e5", soft:"#e0e7ff"},
+        {id:"wait-mechanic", label:"Espera mecánico", codes:["10.09"], aliases:["espera mecanico", "espera de mecanico"], icon:"⚒", color:"#b45309", soft:"#fef3c7"},
+        {id:"wait-water", label:"Espera agua", codes:["10.11"], aliases:["espera agua", "espera de agua"], icon:"◉", color:"#0891b2", soft:"#cffafe"},
+        {id:"wait-measurement", label:"Espera medición", codes:[], aliases:["espera medicion", "espera de medicion"], icon:"⊙", color:"#7c3aed", soft:"#ede9fe"},
+        {id:"wait-fuel", label:"Espera combustible", codes:["10.14"], aliases:["espera combustible", "espera de combustible"], icon:"⛽", color:"#65a30d", soft:"#ecfccb"}
+      ];
+      const ACTIVITY_BY_ID = new Map(ACTIVITY_CATALOG.map(activity => [activity.id, activity]));
+      const state = { rows: [], events: [], filtered: [], filteredEvents: [], projectCode: "", drillingColumns: {}, detailColumns: {}, focusHole:"", wellFilters: {equipment:new Set(), shift:"all", activities:["tool-movement", "", ""]} };
+
+      const el = id => document.getElementById(id);
+      const uploadPanel = el("uploadPanel");
+      const fileInput = el("fileInput");
+      const tooltip = el("tooltip");
+      let tooltipHideTimer = 0;
+      let focusReturnElement = null;
+
+      const drillingAliases = {
+        date: ["fecha"],
+        projectCode: ["codigoproyecto"],
+        hole: ["sondaje", "holeid", "pozo"],
+        shift: ["turno"],
+        from: ["desde"],
+        to: ["hasta"],
+        crown: ["corona"],
+        finish: ["esfinpozo", "finpozo"],
+        equipment: ["equipo"],
+        reportStatus: ["estadoreporte"]
+      };
+
+      const detailAliases = {
+        date: ["fecha"],
+        projectCode: ["codigoproyecto"],
+        hole: ["sondaje", "holeid", "pozo"],
+        shift: ["turno"],
+        startTime: ["inicio"],
+        endTime: ["fin"],
+        activityCode: ["actividad"],
+        activityDescription: ["descripcionactividad"],
+        comments: ["comentarios"],
+        equipment: ["equipo"],
+        reportStatus: ["estadoreporte"]
+      };
+
+      function normalize(value) {
+        return String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+      }
+
+      function clean(value, fallback = "Sin dato") {
+        const text = String(value ?? "").trim();
+        return text || fallback;
+      }
+
+      function escapeHTML(value) {
+        return String(value ?? "").replace(/[&<>'"]/g, char => ({"&":"&amp;", "<":"&lt;", ">":"&gt;", "'":"&#39;", '"':"&quot;"})[char]);
+      }
+
+      function numberValue(value) {
+        if (typeof value === "number") return Number.isFinite(value) ? value : null;
+        if (value == null || value === "") return null;
+        let text = String(value).trim().replace(/\s/g, "");
+        if (text.includes(",") && text.includes(".")) text = text.lastIndexOf(",") > text.lastIndexOf(".") ? text.replace(/\./g, "").replace(",", ".") : text.replace(/,/g, "");
+        else text = text.replace(",", ".");
+        const result = Number(text.replace(/[^0-9+\-.]/g, ""));
+        return Number.isFinite(result) ? result : null;
+      }
+
+      function parseDate(value) {
+        if (value instanceof Date && !Number.isNaN(value.getTime())) return new Date(value.getFullYear(), value.getMonth(), value.getDate());
+        if (typeof value === "number" && window.XLSX) {
+          const parsed = XLSX.SSF.parse_date_code(value);
+          if (parsed) return new Date(parsed.y, parsed.m - 1, parsed.d);
+        }
+        const text = String(value ?? "").trim();
+        if (!text) return null;
+        const local = text.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})/);
+        if (local) {
+          const year = Number(local[3]) + (local[3].length === 2 ? 2000 : 0);
+          const date = new Date(year, Number(local[2]) - 1, Number(local[1]));
+          return Number.isNaN(date.getTime()) ? null : date;
+        }
+        const iso = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+        if (iso) return new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
+        const date = new Date(text);
+        return Number.isNaN(date.getTime()) ? null : new Date(date.getFullYear(), date.getMonth(), date.getDate());
+      }
+
+      function dateKey(date) {
+        if (!date) return "";
+        return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
+      }
+
+      function formatDate(date, long = false) {
+        if (!date) return "Sin fecha";
+        return new Intl.DateTimeFormat("es-CL", long ? {weekday:"short", day:"2-digit", month:"short", year:"numeric"} : {day:"2-digit", month:"2-digit", year:"numeric"}).format(date);
+      }
+
+      function formatNumber(value, decimals = 1) {
+        return new Intl.NumberFormat("es-CL", {maximumFractionDigits: decimals, minimumFractionDigits: 0}).format(value || 0);
+      }
+
+      function parseDateTime(value, fallbackDate = null) {
+        if (value instanceof Date && !Number.isNaN(value.getTime())) {
+          if (fallbackDate && value.getFullYear() < 2000) return new Date(fallbackDate.getFullYear(), fallbackDate.getMonth(), fallbackDate.getDate(), value.getHours(), value.getMinutes(), value.getSeconds());
+          return new Date(value);
+        }
+        if (typeof value === "number" && window.XLSX) {
+          const parsed = XLSX.SSF.parse_date_code(value);
+          if (parsed) {
+            if (fallbackDate && value < 1) return new Date(fallbackDate.getFullYear(), fallbackDate.getMonth(), fallbackDate.getDate(), parsed.H || 0, parsed.M || 0, Math.floor(parsed.S || 0));
+            return new Date(parsed.y, parsed.m - 1, parsed.d, parsed.H || 0, parsed.M || 0, Math.floor(parsed.S || 0));
+          }
+        }
+        const text = String(value ?? "").trim();
+        if (!text) return null;
+        const time = text.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+        if (time && fallbackDate) return new Date(fallbackDate.getFullYear(), fallbackDate.getMonth(), fallbackDate.getDate(), Number(time[1]), Number(time[2]), Number(time[3] || 0));
+        const localDateTime = text.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})[ T]+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+        if (localDateTime) {
+          const year = Number(localDateTime[3]) + (localDateTime[3].length === 2 ? 2000 : 0);
+          return new Date(year, Number(localDateTime[2]) - 1, Number(localDateTime[1]), Number(localDateTime[4]), Number(localDateTime[5]), Number(localDateTime[6] || 0));
+        }
+        const parsed = new Date(text);
+        return Number.isNaN(parsed.getTime()) ? null : parsed;
+      }
+
+      function formatTime(date) {
+        return date && !Number.isNaN(date.getTime()) ? new Intl.DateTimeFormat("es-CL", {hour:"2-digit", minute:"2-digit", hour12:false}).format(date) : "Sin hora";
+      }
+
+      function formatDateTime(date) {
+        if (!date || Number.isNaN(date.getTime())) return "No informado";
+        return new Intl.DateTimeFormat("es-CL", {day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit", hour12:false}).format(date);
+      }
+
+      function getDurationMinutes(start, end) {
+        if (!start || !end) return null;
+        let minutes = Math.round((end - start) / 60000);
+        if (minutes < 0) minutes += 24 * 60;
+        return Number.isFinite(minutes) && minutes >= 0 ? minutes : null;
+      }
+
+      function formatMinutes(minutes) {
+        if (!Number.isFinite(minutes)) return "No informada";
+        const hours = Math.floor(minutes / 60), rest = minutes % 60;
+        return hours ? `${hours} h${rest ? ` ${rest} min` : ""}` : `${rest} min`;
+      }
+
+      function formatDuration(start, end) {
+        return formatMinutes(getDurationMinutes(start, end));
+      }
+
+      function identifyColumns(matrix, aliases, required) {
+        let best = {score: -1, index: 0, map: {}};
+        matrix.slice(0, 30).forEach((row, index) => {
+          const normalized = row.map(normalize);
+          const map = {};
+          Object.entries(aliases).forEach(([key, names]) => {
+            let found = normalized.findIndex(cell => names.includes(cell));
+            if (found < 0) found = normalized.findIndex(cell => names.some(name => cell.includes(name) || name.includes(cell)) && cell.length > 3);
+            if (found >= 0) map[key] = found;
+          });
+          const score = required.reduce((sum, key) => sum + (map[key] !== undefined ? 3 : 0), 0) + Object.keys(map).length;
+          if (score > best.score) best = {score, index, map};
+        });
+        return best;
+      }
+
+      function classifyActivities(code, description, comments = "") {
+        const codeText = String(code ?? "").trim();
+        const descriptionText = normalize(description);
+        const commentText = normalize(comments);
+        const matches = ACTIVITY_CATALOG.filter(item => item.id !== "crown-change" && (item.codes.includes(codeText) || item.aliases.some(alias => descriptionText.includes(normalize(alias)))));
+        ACTIVITY_CATALOG.forEach(item => {
+          if (item.id === "crown-change" || matches.includes(item) || !item.commentAliases?.some(alias => commentText.includes(normalize(alias)))) return;
+          matches.push(item);
+        });
+        return matches;
+      }
+
+      function shiftCode(value) {
+        const text = normalize(value);
+        if (text === "a" || text === "ta" || text.includes("turnoa")) return "A";
+        if (text === "b" || text === "tb" || text.includes("turnob")) return "B";
+        return text.toUpperCase();
+      }
+
+      function booleanValue(value) {
+        return value === true || value === 1 || /^(?:1|si|sí|true|x|finalizado)$/i.test(String(value ?? "").trim());
+      }
+
+      function buildCrownChangeEvents(rows) {
+        const crownDefinition = ACTIVITY_BY_ID.get("crown-change");
+        const previousByWellEquipment = new Map();
+        const events = [];
+        [...rows].sort((a,b) => a.date - b.date || a.sourceRow - b.sourceRow).forEach(row => {
+          const crownId = String(row.crownId ?? "").trim();
+          if (!crownId) return;
+          const sequenceKey = `${normalize(row.hole)}\u0000${normalize(row.equipment)}`;
+          const previous = previousByWellEquipment.get(sequenceKey);
+          if (previous && previous.crownId.toLocaleUpperCase("es-CL") !== crownId.toLocaleUpperCase("es-CL")) {
+            events.push({
+              id:`crown-${row.id}`,
+              source:"perforacion-corona",
+              sourceRow:row.sourceRow,
+              date:row.date,
+              dateKey:row.dateKey,
+              projectCode:row.projectCode,
+              equipment:row.equipment,
+              hole:row.hole,
+              shift:row.shift,
+              activityId:crownDefinition.id,
+              activityLabel:crownDefinition.label,
+              activityCode:"CORONA",
+              activity:"Cambio de Corona",
+              comments:"",
+              start:null,
+              end:null,
+              startLabel:"",
+              endLabel:"",
+              durationMinutes:null,
+              duration:"No informada",
+              depth:row.from,
+              dateLabel:formatDate(row.date, true),
+              previousCrown:previous.crownId,
+              newCrown:crownId,
+              from:row.from,
+              to:row.to
+            });
+          }
+          previousByWellEquipment.set(sequenceKey, {crownId, row});
+        });
+        return events;
+      }
+
+      function parseWorkbook(buffer, fileName) {
+        if (!window.XLSX) throw new Error("No fue posible cargar el lector de Excel. Revisa la conexión a internet y vuelve a abrir la página.");
+        const workbook = XLSX.read(buffer, {type:"array", cellDates:true});
+        const drillingSheetName = workbook.SheetNames.find(name => normalize(name) === "perforacion");
+        const detailSheetName = workbook.SheetNames.find(name => normalize(name) === "detalles");
+        if (!drillingSheetName || !detailSheetName) throw new Error("El reporte debe contener las hojas “Perforación” y “Detalles”.");
+
+        const drillingMatrix = XLSX.utils.sheet_to_json(workbook.Sheets[drillingSheetName], {header:1, defval:null, raw:true});
+        const detailMatrix = XLSX.utils.sheet_to_json(workbook.Sheets[detailSheetName], {header:1, defval:null, raw:true});
+        const drillingMatch = identifyColumns(drillingMatrix, drillingAliases, ["date", "hole", "from", "to", "equipment"]);
+        const detailMatch = identifyColumns(detailMatrix, detailAliases, ["date", "hole", "activityCode", "activityDescription", "equipment"]);
+        const drillingRequired = ["date", "hole", "from", "to", "equipment"];
+        const detailRequired = ["date", "hole", "activityCode", "activityDescription", "equipment"];
+        const drillingMissing = drillingRequired.filter(key => drillingMatch.map[key] === undefined);
+        const detailMissing = detailRequired.filter(key => detailMatch.map[key] === undefined);
+        if (drillingMissing.length) throw new Error(`La hoja “Perforación” no contiene todas las columnas requeridas: ${drillingMissing.join(", ")}.`);
+        if (detailMissing.length) throw new Error(`La hoja “Detalles” no contiene todas las columnas requeridas: ${detailMissing.join(", ")}.`);
+
+        const d = drillingMatch.map;
+        const rows = [];
+        for (let index = drillingMatch.index + 1; index < drillingMatrix.length; index++) {
+          const source = drillingMatrix[index];
+          if (!source || source.every(value => value == null || String(value).trim() === "")) continue;
+          const date = parseDate(source[d.date]);
+          const hole = clean(source[d.hole], "Sin HoleID");
+          const from = numberValue(source[d.from]);
+          const to = numberValue(source[d.to]);
+          if (!date || hole === "Sin HoleID" || from === null || to === null) continue;
+          rows.push({
+            id:`drilling-${index}-${dateKey(date)}-${hole}`,
+            sourceRow:index + 1,
+            date,
+            dateKey:dateKey(date),
+            projectCode:d.projectCode !== undefined ? clean(source[d.projectCode], "") : "",
+            equipment:clean(source[d.equipment], "Sin equipo"),
+            hole,
+            shift:d.shift !== undefined ? clean(source[d.shift], "Sin turno") : "Sin turno",
+            crownId:d.crown !== undefined ? clean(source[d.crown], "") : "",
+            from,
+            to,
+            advance:Math.max(0, to - from),
+            finished:d.finish !== undefined ? booleanValue(source[d.finish]) : false
+          });
+        }
+        if (!rows.length) throw new Error("La hoja “Perforación” no contiene registros válidos con FECHA, SONDAJE, DESDE y HASTA.");
+        rows.sort((a,b) => a.date - b.date || a.hole.localeCompare(b.hole, "es", {numeric:true}) || a.sourceRow - b.sourceRow);
+
+        const t = detailMatch.map;
+        const events = buildCrownChangeEvents(rows);
+        for (let index = detailMatch.index + 1; index < detailMatrix.length; index++) {
+          const source = detailMatrix[index];
+          if (!source || source.every(value => value == null || String(value).trim() === "")) continue;
+          const activityCode = t.activityCode !== undefined ? clean(source[t.activityCode], "") : "";
+          const activity = t.activityDescription !== undefined ? clean(source[t.activityDescription], "") : "";
+          const comments = t.comments !== undefined ? clean(source[t.comments], "") : "";
+          const activityMatches = classifyActivities(activityCode, activity, comments);
+          if (!activityMatches.length) continue;
+          const date = parseDate(source[t.date]);
+          const hole = clean(source[t.hole], "Sin HoleID");
+          if (!date || hole === "Sin HoleID") continue;
+          const start = t.startTime !== undefined ? parseDateTime(source[t.startTime], date) : null;
+          let end = t.endTime !== undefined ? parseDateTime(source[t.endTime], date) : null;
+          if (start && end && end < start && start - end < DAY_MS) end = new Date(end.getTime() + DAY_MS);
+          activityMatches.forEach(activityDefinition => events.push({
+              id:`detail-${index}-${dateKey(date)}-${hole}-${activityDefinition.id}`,
+              sourceRow:index + 1,
+              date,
+              dateKey:dateKey(date),
+              projectCode:t.projectCode !== undefined ? clean(source[t.projectCode], "") : "",
+              equipment:clean(source[t.equipment], "Sin equipo"),
+              hole,
+              shift:t.shift !== undefined ? clean(source[t.shift], "Sin turno") : "Sin turno",
+              activityId:activityDefinition.id,
+              activityLabel:activityDefinition.label,
+              activityCode,
+              activity,
+              comments,
+              start,
+              end,
+              startLabel:formatDateTime(start),
+              endLabel:formatDateTime(end),
+              timeRange:start || end ? `${formatTime(start)} – ${formatTime(end)}` : "Sin horario",
+              durationMinutes:getDurationMinutes(start, end),
+              duration:formatDuration(start, end),
+              depth:null
+            }));
+        }
+        events.forEach(event => {
+          if (Number.isFinite(event.depth)) return;
+          const sameShift = rows.filter(row => row.hole === event.hole && row.dateKey === event.dateKey && shiftCode(row.shift) === shiftCode(event.shift));
+          const sameDay = rows.filter(row => row.hole === event.hole && row.dateKey === event.dateKey);
+          const previous = rows.filter(row => row.hole === event.hole && row.date <= event.date);
+          const candidates = sameShift.length ? sameShift : (sameDay.length ? sameDay : previous);
+          if (candidates.length) event.depth = Math.max(...candidates.map(row => Number.isFinite(row.to) ? row.to : row.from));
+        });
+        events.sort((a,b) => (a.start?.getTime() ?? a.date.getTime()) - (b.start?.getTime() ?? b.date.getTime()) || a.sourceRow - b.sourceRow);
+        const projectCode = rows.find(row => row.projectCode)?.projectCode || events.find(event => event.projectCode)?.projectCode || "Proyecto sin código";
+        return {rows, events, projectCode, drillingColumns:d, detailColumns:t, fileName};
+      }
+
+      async function loadFile(file) {
+        if (!REPORT_FILE_PATTERN.test(String(file.name || "").trim())) throw new Error(`El archivo debe tener el formato “EMSA_ReportDrilling_….xlsx”. Se recibió “${file.name}”.`);
+        setLoading("Leyendo Perforación y Detalles…");
+        const parsed = parseWorkbook(await file.arrayBuffer(), file.name);
+        initialize(parsed);
+      }
+
+      function setLoading(message, isError = false) {
+        el("loaderMessage").textContent = message;
+        el("fileStatus").className = `file-status${isError ? " error" : ""}`;
+        el("fileStatusText").textContent = isError ? "Error al cargar datos" : message;
+      }
+
+      function initialize(parsed) {
+        closeWellFocus(false);
+        state.rows = parsed.rows;
+        state.events = parsed.events;
+        state.projectCode = parsed.projectCode;
+        state.drillingColumns = parsed.drillingColumns;
+        state.detailColumns = parsed.detailColumns;
+        resetWellFilters();
+        el("reportProject").textContent = state.projectCode;
+
+        uploadPanel.hidden = true;
+        el("dashboard").hidden = false;
+        el("fileStatus").className = "file-status ready";
+        el("fileStatusText").textContent = `${parsed.fileName} · ${state.projectCode} · ${formatNumber(state.rows.length, 0)} avances · ${formatNumber(state.events.length, 0)} actividades clasificadas`;
+        render();
+      }
+
+      function unique(values) {
+        return [...new Set(values)].sort((a,b) => String(a).localeCompare(String(b), "es", {numeric:true, sensitivity:"base"}));
+      }
+
+      function resetWellFilters() {
+        const equipment = unique([...state.rows.map(row => row.equipment), ...state.events.map(event => event.equipment)]);
+        state.wellFilters.equipment = new Set(equipment);
+        state.wellFilters.shift = "all";
+        state.wellFilters.activities = ["tool-movement", "", ""];
+        updateShiftButtons();
+        renderActivityFilters();
+        buildCheckboxFilter("equipmentFilter", equipment, state.wellFilters.equipment, value => {
+          state.wellFilters.equipment = value;
+          render();
+        });
+      }
+
+      function buildCheckboxFilter(id, values, selection, onChange) {
+        const root = el(id);
+        root.innerHTML = "";
+        const allLabel = document.createElement("label");
+        allLabel.className = "checkbox-option all";
+        allLabel.innerHTML = `<input type="checkbox"> Todos`;
+        root.appendChild(allLabel);
+        const allInput = allLabel.querySelector("input");
+        const syncAll = () => {
+          allInput.checked = values.length > 0 && selection.size === values.length;
+          allInput.indeterminate = selection.size > 0 && selection.size < values.length;
+        };
+        allInput.addEventListener("change", () => {
+          selection.clear();
+          if (allInput.checked) values.forEach(value => selection.add(value));
+          root.querySelectorAll("input[data-value]").forEach(box => box.checked = allInput.checked);
+          syncAll();
+          onChange(new Set(selection));
+        });
+        values.forEach(value => {
+          const label = document.createElement("label");
+          label.className = "checkbox-option";
+          const box = document.createElement("input");
+          box.type = "checkbox";
+          box.dataset.value = value;
+          box.checked = selection.has(value);
+          label.append(box, document.createTextNode(value));
+          root.appendChild(label);
+          box.addEventListener("change", () => {
+            box.checked ? selection.add(value) : selection.delete(value);
+            syncAll();
+            onChange(new Set(selection));
+          });
+        });
+        syncAll();
+      }
+
+      function updateShiftButtons() {
+        document.querySelectorAll("#shiftFilter button[data-shift]").forEach(button => {
+          const active = button.dataset.shift === state.wellFilters.shift;
+          button.classList.toggle("active", active);
+          button.setAttribute("aria-checked", String(active));
+        });
+      }
+
+      function renderActivityFilters() {
+        const selected = state.wellFilters.activities.filter(Boolean);
+        const counts = new Map(ACTIVITY_CATALOG.map(activity => [activity.id, state.events.filter(event => event.activityId === activity.id).length]));
+        document.querySelectorAll("select[data-activity-slot]").forEach(select => {
+          const slot = Number(select.dataset.activitySlot);
+          const current = state.wellFilters.activities[slot] || "";
+          const usedElsewhere = new Set(selected.filter(id => id !== current));
+          select.innerHTML = `<option value="">Sin actividad</option>${ACTIVITY_CATALOG.map(activity => `<option value="${activity.id}"${activity.id === current ? " selected" : ""}${usedElsewhere.has(activity.id) ? " disabled" : ""}>${activity.icon} ${activity.label} (${counts.get(activity.id) || 0})</option>`).join("")}`;
+        });
+        const activeDefinitions = state.wellFilters.activities.map(id => ACTIVITY_BY_ID.get(id)).filter(Boolean);
+        const legendHTML = activeDefinitions.length ? activeDefinitions.map(activity => `<span class="legend-item"><i class="legend-event" style="color:${activity.color};background:${activity.soft};border:1px solid ${activity.color}55">${activity.icon}</i>${escapeHTML(activity.label)}</span>`).join("") : `<span class="legend-item">Sin actividades seleccionadas</span>`;
+        [el("activityLegend"), el("focusActivityLegend")].filter(Boolean).forEach(legend => { legend.innerHTML = legendHTML; });
+      }
+
+      function matchesSelectedShift(shift) {
+        return state.wellFilters.shift === "all" || shiftCode(shift) === state.wellFilters.shift;
+      }
+
+      function dimensionFilteredRows() {
+        return state.rows.filter(row => state.wellFilters.equipment.has(row.equipment) && matchesSelectedShift(row.shift));
+      }
+
+      function dimensionFilteredEvents() {
+        const selectedActivities = new Set(state.wellFilters.activities.filter(Boolean));
+        return state.events.filter(event => selectedActivities.has(event.activityId) && state.wellFilters.equipment.has(event.equipment) && matchesSelectedShift(event.shift));
+      }
+
+      function render() {
+        state.filtered = dimensionFilteredRows();
+        state.filteredEvents = dimensionFilteredEvents();
+        renderWells();
+        renderNotice();
+        if (state.focusHole) renderFocusedWell();
+      }
+
+      function groupDrillingRowsByShift(rows) {
+        const groups = new Map();
+        [...rows].sort((a,b) => a.date - b.date || a.sourceRow - b.sourceRow).forEach(row => {
+          const key = `${row.hole}\u0000${row.dateKey}\u0000${shiftCode(row.shift)}`;
+          let group = groups.get(key);
+          if (!group) {
+            group = {hole:row.hole, date:row.date, dateKey:row.dateKey, shift:row.shift, rows:[], equipmentValues:new Set(), from:row.from, to:row.to, advance:0};
+            groups.set(key, group);
+          }
+          group.rows.push(row);
+          group.equipmentValues.add(row.equipment);
+          group.from = Math.min(group.from, row.from);
+          group.to = Math.max(group.to, row.to);
+          group.advance += row.advance;
+        });
+        return [...groups.values()].map(group => ({...group, equipment:unique([...group.equipmentValues]).join(" · "), tramoCount:group.rows.length})).sort((a,b) => a.date - b.date || a.hole.localeCompare(b.hole, "es", {numeric:true}) || shiftCode(a.shift).localeCompare(shiftCode(b.shift)));
+      }
+
+      function countCalendarDaysWithoutAdvance(rows, firstDate, completionDate) {
+        if (!firstDate || !completionDate || completionDate < firstDate) return 0;
+        const advanceByDate = new Map();
+        rows.forEach(row => {
+          const advance = Number.isFinite(row.advance) ? row.advance : 0;
+          advanceByDate.set(row.dateKey, (advanceByDate.get(row.dateKey) || 0) + advance);
+        });
+        const cursor = new Date(firstDate.getFullYear(), firstDate.getMonth(), firstDate.getDate());
+        const end = new Date(completionDate.getFullYear(), completionDate.getMonth(), completionDate.getDate());
+        let daysWithoutAdvance = 0;
+        while (cursor <= end) {
+          if ((advanceByDate.get(dateKey(cursor)) || 0) === 0) daysWithoutAdvance++;
+          cursor.setDate(cursor.getDate() + 1);
+        }
+        return daysWithoutAdvance;
+      }
+
+      function buildNoAdvancePauses(rows, firstDate, completionDate) {
+        if (!firstDate || !completionDate || completionDate < firstDate) return [];
+        const drillingByDate = new Map();
+        rows.forEach(row => {
+          let day = drillingByDate.get(row.dateKey);
+          if (!day) {
+            day = {advance:0, depth:null};
+            drillingByDate.set(row.dateKey, day);
+          }
+          day.advance += Number.isFinite(row.advance) ? row.advance : 0;
+          if (Number.isFinite(row.to)) day.depth = Number.isFinite(day.depth) ? Math.max(day.depth, row.to) : row.to;
+        });
+        const cursor = new Date(firstDate.getFullYear(), firstDate.getMonth(), firstDate.getDate());
+        const end = new Date(completionDate.getFullYear(), completionDate.getMonth(), completionDate.getDate());
+        const pauses = [];
+        let previousDrillingDay = null;
+        let openPause = null;
+        while (cursor <= end) {
+          const day = drillingByDate.get(dateKey(cursor));
+          if ((day?.advance || 0) > 0) {
+            if (openPause && previousDrillingDay) {
+              const pauseEnd = new Date(cursor);
+              pauseEnd.setDate(pauseEnd.getDate() - 1);
+              pauses.push({
+                startDate:openPause.startDate,
+                endDate:pauseEnd,
+                days:openPause.days,
+                previousDate:previousDrillingDay.date,
+                nextDate:new Date(cursor),
+                depth:previousDrillingDay.depth
+              });
+            }
+            previousDrillingDay = {date:new Date(cursor), depth:day.depth};
+            openPause = null;
+          } else if (previousDrillingDay) {
+            if (!openPause) openPause = {startDate:new Date(cursor), days:0};
+            openPause.days++;
+          }
+          cursor.setDate(cursor.getDate() + 1);
+        }
+        return pauses;
+      }
+
+      function buildContinuousSegmentLayout(segments) {
+        const visualSegments = segments.map(segment => ({...segment, visualFrom:segment.from, visualTo:segment.to}));
+        for (let index = 1; index < visualSegments.length; index++) {
+          const previous = visualSegments[index - 1];
+          const current = visualSegments[index];
+          if (![previous.visualFrom, previous.visualTo, current.visualFrom, current.visualTo].every(Number.isFinite)) continue;
+          if (Math.abs(current.visualFrom - previous.visualTo) < .000001) continue;
+          const midpoint = (previous.visualTo + current.visualFrom) / 2;
+          const boundary = Math.max(previous.visualFrom, Math.min(current.visualTo, midpoint));
+          previous.visualTo = boundary;
+          current.visualFrom = boundary;
+        }
+        return visualSegments;
+      }
+
+      function pauseVisualDepth(pause, visualSegments) {
+        const previousKey = dateKey(pause.previousDate);
+        const nextKey = dateKey(pause.nextDate);
+        const previousSegments = visualSegments.filter(segment => segment.dateKey === previousKey);
+        const nextSegment = visualSegments.find(segment => segment.dateKey === nextKey);
+        const previousSegment = previousSegments[previousSegments.length - 1];
+        if (Number.isFinite(previousSegment?.visualTo)) return previousSegment.visualTo;
+        if (Number.isFinite(nextSegment?.visualFrom)) return nextSegment.visualFrom;
+        return pause.depth;
+      }
+
+      function bindTooltips(root) {
+        root.querySelectorAll("[data-tooltip]").forEach(node => {
+          node.addEventListener("mouseenter", event => showTooltip(event, JSON.parse(node.dataset.tooltip)));
+          node.addEventListener("mousemove", moveTooltip);
+          node.addEventListener("mouseleave", hideTooltip);
+        });
+      }
+
+      function renderWells() {
+        const container = el("wellsContainer");
+        const previousGrid = container.querySelector(".wells-grid");
+        const previousScrollbar = container.querySelector(".well-scrollbar");
+        const previousScrollLeft = Math.max(previousGrid?.scrollLeft || 0, previousScrollbar?.scrollLeft || 0);
+        const chartRows = dimensionFilteredRows();
+        const chartEvents = dimensionFilteredEvents();
+        const chartSegments = groupDrillingRowsByShift(chartRows);
+        const holes = unique(chartRows.map(row => row.hole)).map(hole => {
+          const rows = chartRows.filter(row => row.hole === hole);
+          const statusRows = state.rows.filter(row => row.hole === hole);
+          const finished = statusRows.some(row => row.finished);
+          const finishRow = statusRows.find(row => row.finished);
+          return {hole, rows, segments:chartSegments.filter(segment => segment.hole === hole), statusRows, events:chartEvents.filter(event => event.hole === hole), finished, firstDate:statusRows[0]?.date, endDate:finishRow?.date || statusRows[statusRows.length-1]?.date};
+        }).sort((a,b) => Number(b.finished) - Number(a.finished) || a.firstDate - b.firstDate || a.endDate - b.endDate || a.hole.localeCompare(b.hole, "es", {numeric:true}));
+        if (!holes.length) {
+          container.innerHTML = `<div class="empty-state"><strong>No hay pozos para esta selección</strong>Ajusta los filtros de equipo o turno.</div>`;
+          return;
+        }
+        const allDepths = chartRows.flatMap(row => [row.from, row.to]).filter(value => Number.isFinite(value) && value >= 0);
+        const maximumDepth = allDepths.length ? Math.max(...allDepths) : 1;
+        const scaleMax = niceDepthMax(maximumDepth);
+        const dailyTotals = new Map();
+        chartSegments.forEach(segment => {
+          const key = `${segment.hole}\u0000${segment.dateKey}`;
+          dailyTotals.set(key, (dailyTotals.get(key) || 0) + segment.advance);
+        });
+        const maxDailyAdvance = Math.max(1, ...dailyTotals.values());
+        container.innerHTML = `<div class="well-scrollbar" aria-label="Desplazamiento horizontal de pozos"><div class="well-scrollbar-track"></div></div><div class="wells-grid">${holes.map(item => renderWell(item.hole, item.rows, item.events, scaleMax, dailyTotals, maxDailyAdvance, item.statusRows, item.segments)).join("")}</div>`;
+        bindTooltips(container);
+        setupWellScroller(container, previousScrollLeft);
+      }
+
+      function renderFocusedWell() {
+        const container = el("focusedWellContainer");
+        const stage = el("wellFocusStage");
+        if (!state.focusHole || el("wellFocusView").hidden) return;
+        const previousScrollTop = stage.scrollTop;
+        const rows = dimensionFilteredRows().filter(row => row.hole === state.focusHole);
+        if (!rows.length) {
+          container.innerHTML = `<div class="empty-state"><strong>Sondaje no disponible</strong>El sondaje ya no forma parte de los filtros seleccionados.</div>`;
+          return;
+        }
+        const segments = groupDrillingRowsByShift(rows);
+        const statusRows = state.rows.filter(row => row.hole === state.focusHole);
+        const events = dimensionFilteredEvents().filter(event => event.hole === state.focusHole);
+        const allDepths = rows.flatMap(row => [row.from, row.to]).filter(value => Number.isFinite(value) && value >= 0);
+        const scaleMax = niceDepthMax(allDepths.length ? Math.max(...allDepths) : 1);
+        const dailyTotals = new Map();
+        segments.forEach(segment => {
+          const key = `${segment.hole}\u0000${segment.dateKey}`;
+          dailyTotals.set(key, (dailyTotals.get(key) || 0) + segment.advance);
+        });
+        const maxDailyAdvance = Math.max(1, ...dailyTotals.values());
+        const equipments = unique(rows.map(row => row.equipment)).join(" · ");
+        el("wellFocusTitle").textContent = state.focusHole;
+        el("wellFocusEquipment").textContent = equipments;
+        container.innerHTML = renderWell(state.focusHole, rows, events, scaleMax, dailyTotals, maxDailyAdvance, statusRows, segments, true);
+        bindTooltips(container);
+        requestAnimationFrame(() => { stage.scrollTop = previousScrollTop; });
+      }
+
+      function openWellFocus(hole, trigger = null) {
+        if (!hole) return;
+        state.focusHole = hole;
+        focusReturnElement = trigger || document.activeElement;
+        const view = el("wellFocusView");
+        el("wellFocusStage").scrollTop = 0;
+        view.hidden = false;
+        document.body.classList.add("focus-open");
+        renderActivityFilters();
+        renderFocusedWell();
+        requestAnimationFrame(() => el("closeWellFocus").focus());
+      }
+
+      function closeWellFocus(restoreFocus = true) {
+        if (!state.focusHole && el("wellFocusView").hidden) return;
+        const closingHole = state.focusHole;
+        hideTooltip(true);
+        state.focusHole = "";
+        el("wellFocusView").hidden = true;
+        document.body.classList.remove("focus-open");
+        const fallbackTrigger = [...document.querySelectorAll("[data-focus-hole]")].find(trigger => trigger.dataset.focusHole === closingHole);
+        if (restoreFocus) (focusReturnElement?.isConnected ? focusReturnElement : fallbackTrigger)?.focus();
+        focusReturnElement = null;
+      }
+
+      function setupWellScroller(container, initialScrollLeft = 0) {
+        const topScrollbar = container.querySelector(".well-scrollbar");
+        const track = container.querySelector(".well-scrollbar-track");
+        const grid = container.querySelector(".wells-grid");
+        if (!topScrollbar || !track || !grid) return;
+        grid.scrollLeft = Math.min(initialScrollLeft, Math.max(0, grid.scrollWidth - grid.clientWidth));
+        let topFrame = 0;
+        const updateWidth = () => { track.style.width = `${grid.scrollWidth}px`; };
+        topScrollbar.addEventListener("scroll", () => {
+          cancelAnimationFrame(topFrame);
+          topFrame = requestAnimationFrame(() => {
+            if (Math.abs(grid.scrollLeft - topScrollbar.scrollLeft) > .5) grid.scrollLeft = topScrollbar.scrollLeft;
+          });
+        });
+        grid.addEventListener("scroll", () => {
+          if (Math.abs(topScrollbar.scrollLeft - grid.scrollLeft) > .5) topScrollbar.scrollLeft = grid.scrollLeft;
+        });
+        requestAnimationFrame(() => {
+          updateWidth();
+          const restoredScrollLeft = Math.min(initialScrollLeft, Math.max(0, grid.scrollWidth - grid.clientWidth));
+          grid.scrollLeft = restoredScrollLeft;
+          topScrollbar.scrollLeft = restoredScrollLeft;
+        });
+      }
+
+      function syncWellScrollbarWidth() {
+        const grid = document.querySelector(".wells-grid");
+        const track = document.querySelector(".well-scrollbar-track");
+        if (grid && track) track.style.width = `${grid.scrollWidth}px`;
+      }
+
+      function niceDepthMax(value) {
+        if (value <= 100) return Math.max(10, Math.ceil(value / 10) * 10);
+        if (value <= 500) return Math.ceil(value / 50) * 50;
+        if (value <= 2000) return Math.ceil(value / 100) * 100;
+        return Math.ceil(value / 500) * 500;
+      }
+
+      function mixColor(light, dark, amount) {
+        const channels = color => color.match(/[a-f\d]{2}/gi).map(value => parseInt(value, 16));
+        const from = channels(light), to = channels(dark);
+        const mixed = from.map((value,index) => Math.round(value + (to[index] - value) * Math.max(0, Math.min(1, amount))));
+        return `#${mixed.map(value => value.toString(16).padStart(2,"0")).join("")}`;
+      }
+
+      function groupActivityEvents(events) {
+        const ordered = [...events].sort((a,b) => (a.start?.getTime() ?? a.date.getTime()) - (b.start?.getTime() ?? b.date.getTime()) || a.sourceRow - b.sourceRow);
+        const groups = [];
+        const previousByActivity = new Map();
+        ordered.forEach(event => {
+          const previous = previousByActivity.get(event.activityId);
+          const sameDepth = previous && Number.isFinite(previous.depth) && Number.isFinite(event.depth) && Math.abs(previous.depth - event.depth) < .01;
+          if (sameDepth) previous.events.push(event);
+          else {
+            const group = {activityId:event.activityId, depth:event.depth, events:[event]};
+            groups.push(group);
+            previousByActivity.set(event.activityId, group);
+          }
+        });
+        return groups.sort((a,b) => (a.events[0].start?.getTime() ?? a.events[0].date.getTime()) - (b.events[0].start?.getTime() ?? b.events[0].date.getTime()));
+      }
+
+      function layoutEventGroups(groups, yForDepth) {
+        const activityLanes = [[215, 305], [165, 355], [115, 405]];
+        const lastY = new Map(activityLanes.flat().map(x => [x, -Infinity]));
+        return groups.map(group => {
+          const markerY = yForDepth(Number.isFinite(group.depth) ? group.depth : 0);
+          const slot = Math.max(0, state.wellFilters.activities.indexOf(group.activityId));
+          const lanes = activityLanes[Math.min(slot, activityLanes.length - 1)];
+          const available = lanes.find(x => Math.abs(markerY - lastY.get(x)) >= 32);
+          const lane = available ?? lanes.reduce((best,x) => Math.abs(markerY-lastY.get(x)) > Math.abs(markerY-lastY.get(best)) ? x : best, lanes[0]);
+          lastY.set(lane, markerY);
+          return {group, x:lane, y:markerY};
+        });
+      }
+
+      function renderWell(hole, rows, events, scaleMax, dailyTotals, maxDailyAdvance, statusRows = rows, shiftSegments = [], focusMode = false) {
+        const depths = rows.flatMap(row => [row.from, row.to]).filter(Number.isFinite);
+        const maxDepth = depths.length ? Math.max(0, ...depths) : 0;
+        const top = 45, bottom = 1320, center = 260;
+        const minimumSegmentHeight = 6;
+        const y = depth => top + Math.max(0, Number.isFinite(depth) ? depth : 0) / scaleMax * (bottom - top);
+        const ticks = Array.from({length:6}, (_,i) => scaleMax * i / 5);
+        const segments = buildContinuousSegmentLayout(shiftSegments.filter(segment => Number.isFinite(segment.from) && Number.isFinite(segment.to) && segment.to >= segment.from));
+        const total = rows.reduce((sum,row) => sum + row.advance, 0);
+        const finished = statusRows.some(row => row.finished);
+        const equipments = unique(rows.map(row => row.equipment)).join(" · ");
+        const firstDate = statusRows[0]?.date;
+        const lastDate = statusRows[statusRows.length-1]?.date;
+        const finishRow = statusRows.find(row => row.finished);
+        const completionDate = finished ? (finishRow?.date || lastDate) : lastDate;
+        const elapsedDays = firstDate && completionDate ? Math.max(1, Math.round((completionDate - firstDate) / DAY_MS) + 1) : 0;
+        const daysWithoutAdvance = countCalendarDaysWithoutAdvance(rows, firstDate, completionDate);
+        const pauses = buildNoAdvancePauses(rows, firstDate, completionDate);
+        const rate = elapsedDays ? total / elapsedDays : 0;
+        const wellBottom = y(maxDepth);
+
+        const environmentId = `earth-${focusMode ? "focus-" : ""}${String(hole).replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+        const environment = `<defs>
+          <linearGradient id="${environmentId}-gradient" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e8d8b9"/><stop offset=".48" stop-color="#d9bd91"/><stop offset="1" stop-color="#bd9165"/></linearGradient>
+          <pattern id="${environmentId}-texture" width="34" height="34" patternUnits="userSpaceOnUse"><circle cx="7" cy="9" r="1.1" fill="#936b48"/><circle cx="25" cy="22" r=".8" fill="#a67b53"/><path d="M13 29l4-2 3 2" fill="none" stroke="#a67b53" stroke-width=".8"/></pattern>
+        </defs>
+        <rect class="earth-zone" x="88" y="${top}" width="344" height="${bottom-top}" rx="14" fill="url(#${environmentId}-gradient)"/>
+        <rect class="earth-texture" x="88" y="${top}" width="344" height="${bottom-top}" rx="14" fill="url(#${environmentId}-texture)"/>
+        <path class="earth-strata" d="M100 ${top+255} C175 ${top+230}, 340 ${top+282}, 420 ${top+250} M100 ${top+590} C185 ${top+555}, 332 ${top+628}, 420 ${top+585} M100 ${top+955} C185 ${top+918}, 338 ${top+988}, 420 ${top+945}"/>
+        <path class="surface-soil" d="M90 ${top+1} C135 ${top-4}, 173 ${top+6}, 218 ${top} S305 ${top-5}, 350 ${top+1} S402 ${top+4}, 430 ${top}"/>
+        <path class="surface-grass" d="M90 ${top-2} C135 ${top-7}, 173 ${top+3}, 218 ${top-3} S305 ${top-8}, 350 ${top-2} S402 ${top+1}, 430 ${top-3}"/>`;
+        const axis = ticks.map(depth => `<line class="axis-line" x1="82" x2="438" y1="${y(depth)}" y2="${y(depth)}"/><text class="depth-label" x="76" y="${y(depth)+3}" text-anchor="end">${formatNumber(depth)} m</text>`).join("");
+        const boreSegments = segments.map(segment => {
+          let y1 = y(segment.visualFrom), y2 = y(segment.visualTo);
+          if (Math.abs(y2-y1) < minimumSegmentHeight && segment.advance > 0) y2 = y1 + minimumSegmentHeight;
+          const segmentTop = Math.min(y1,y2) - .3;
+          const segmentHeight = Math.max(1,Math.abs(y2-y1)) + .6;
+          const dailyAdvance = dailyTotals.get(`${segment.hole}\u0000${segment.dateKey}`) || 0;
+          const intensity = dailyAdvance / maxDailyAdvance;
+          const segmentColor = finished ? mixColor("#bbf7d0", "#14532d", intensity) : mixColor("#fed7aa", "#9a3412", intensity);
+          const payload = escapeHTML(JSON.stringify({kind:"advance", title:`Avance por turno · ${segment.hole}`, date:formatDate(segment.date, true), shift:segment.shift, equipment:segment.equipment, from:segment.from, to:segment.to, advance:segment.advance, dailyAdvance, tramoCount:segment.tramoCount}));
+          return `<rect class="segment" x="${center-14}" y="${segmentTop}" width="28" height="${segmentHeight}" fill="${segmentColor}" opacity=".96" data-tooltip="${payload}"/>`;
+        }).join("");
+        const pauseMarkers = pauses.map(pause => {
+          const visualDepth = pauseVisualDepth(pause, segments);
+          return pauseMarker(pause, y(Number.isFinite(visualDepth) ? visualDepth : 0), center, hole);
+        }).join("");
+        const eventGroups = groupActivityEvents(events);
+        const markers = layoutEventGroups(eventGroups, y).map(item => eventMarker(item.group, item.y, item.x, center)).join("");
+        const titleRow = focusMode
+          ? `<div class="well-title-row"><span class="well-name">${escapeHTML(hole)}</span><strong class="well-equipment">${escapeHTML(equipments)}</strong></div>`
+          : `<button class="well-title-row well-focus-trigger" type="button" data-focus-hole="${escapeHTML(hole)}" aria-label="Ampliar sondaje ${escapeHTML(hole)}, equipo ${escapeHTML(equipments)}"><span class="well-name">${escapeHTML(hole)}</span><strong class="well-equipment">${escapeHTML(equipments)}</strong><span class="well-open-glyph" aria-hidden="true">↗</span></button>`;
+
+        return `<article class="well-card${finished ? " is-finished" : ""}" data-hole="${escapeHTML(hole)}">
+          <div class="well-head"><div>${titleRow}<div class="well-meta">${formatDate(firstDate)} – ${formatDate(completionDate)}</div><span class="well-badge${finished ? "" : " is-active"}">${finished ? "✓ Finalizado" : "● En proceso"}</span></div><div class="well-total">+${formatNumber(total)} m</div></div>
+          <div class="well-duration">
+            <div><span>${finished ? "Duración total" : "Tiempo registrado"}</span><strong>${elapsedDays} días</strong></div>
+            <div><span>Metros realizados</span><strong>${formatNumber(total)} m</strong></div>
+            <div><span>Rendimiento</span><strong>${formatNumber(rate)} m/día</strong></div>
+            <div><span>Días sin avance</span><strong>${daysWithoutAdvance} días</strong></div>
+            <div><span>Eventos visibles</span><strong>${events.length}</strong></div>
+          </div>
+          <svg class="well-svg" viewBox="0 0 520 1400" role="img" aria-label="Perfil descendente del pozo ${escapeHTML(hole)}">
+            ${environment}
+            ${axis}
+            <line class="bore-bg" x1="${center}" x2="${center}" y1="${top}" y2="${wellBottom}"/>
+            <rect class="bore-edge" x="245.5" y="${top}" width="29" height="${Math.max(1, wellBottom-top)}" rx="14"/>
+            ${boreSegments}
+            ${pauseMarkers}
+            ${markers}
+            <path d="M245 ${wellBottom}h30l-15 21Z" fill="${finished ? "#14532d" : "#1c3446"}" stroke="${finished ? "#4ade80" : "#527084"}" stroke-width="1"/>
+            <text class="date-caption" x="260" y="1380">Profundidad alcanzada: ${formatNumber(maxDepth)} m</text>
+          </svg>
+        </article>`;
+      }
+
+      function pauseMarker(pause, y, center, hole) {
+        const payload = escapeHTML(JSON.stringify({
+          kind:"pause",
+          title:`Pausa de perforación · ${hole}`,
+          days:pause.days,
+          startLabel:formatDate(pause.startDate, true),
+          endLabel:formatDate(pause.endDate, true),
+          previousLabel:formatDate(pause.previousDate, true),
+          nextLabel:formatDate(pause.nextDate, true),
+          depth:pause.depth
+        }));
+        const points = [
+          [center-44,y], [center-36,y-1.8], [center-28,y+1.8], [center-20,y-1.8], [center-12,y+1.8],
+          [center-4,y-1.8], [center+4,y+1.8], [center+12,y-1.8], [center+20,y+1.8], [center+28,y-1.8],
+          [center+36,y+1.8], [center+44,y]
+        ].map(point => point.join(",")).join(" ");
+        return `<g class="pause-hit"><polyline class="pause-hit-area" points="${points}" data-tooltip="${payload}"/><polyline class="pause-zigzag" points="${points}"/></g>`;
+      }
+
+      function eventMarker(group, y, x, center) {
+        const activityDefinition = ACTIVITY_BY_ID.get(group.activityId) || ACTIVITY_CATALOG[0];
+        const fill = activityDefinition.soft;
+        const stroke = activityDefinition.color;
+        const textColor = activityDefinition.color;
+        const count = group.events.length;
+        const equipment = unique(group.events.map(event => event.equipment)).join(" · ");
+        let tooltipData;
+        if (group.activityId === "crown-change") {
+          const details = group.events.map(event => ({dateLabel:event.dateLabel, equipment:event.equipment, previousCrown:event.previousCrown, newCrown:event.newCrown, from:event.from, to:event.to}));
+          tooltipData = {kind:"crown-group", title:count > 1 ? `Cambio de Corona · ${count} cambios` : "Cambio de Corona", equipment, depth:group.depth, events:details};
+        } else {
+          const details = group.events.map(event => ({startLabel:event.startLabel, endLabel:event.endLabel, activity:event.activity, activityCode:event.activityCode, duration:event.duration, comment:event.comments}));
+          const knownDurations = group.events.map(event => event.durationMinutes).filter(Number.isFinite);
+          const totalMinutes = knownDurations.reduce((sum,minutes) => sum + minutes, 0);
+          const totalDuration = knownDurations.length === count ? formatMinutes(totalMinutes) : (knownDurations.length ? `${formatMinutes(totalMinutes)} (parcial)` : "No informada");
+          tooltipData = {kind:"event-group", title:count > 1 ? `${activityDefinition.label} · ${count} registros` : activityDefinition.label, equipment, depth:group.depth, totalDuration, events:details};
+        }
+        const payload = escapeHTML(JSON.stringify(tooltipData));
+        const badge = count > 1 ? `<circle cx="${x+9}" cy="${y-9}" r="7" fill="${stroke}" stroke="${fill}" stroke-width="1"/><text class="event-count" x="${x+9}" y="${y-8.5}">${count}</text>` : "";
+        const connectorEnd = x < center ? x + 12 : x - 12;
+        return `<g class="event-hit" data-activity="${activityDefinition.id}" data-tooltip="${payload}"><line x1="${center}" y1="${y}" x2="${connectorEnd}" y2="${y}" stroke="${stroke}" stroke-width="1" stroke-dasharray="2 3"/><circle class="event-ring" cx="${x}" cy="${y}" r="12" fill="${fill}" stroke="${stroke}"/><text class="event-text" x="${x}" y="${y+.5}" fill="${textColor}">${activityDefinition.icon}</text>${badge}</g>`;
+      }
+
+      function showTooltip(event, data) {
+        clearTimeout(tooltipHideTimer);
+        let html = `<div class="tooltip-title">${escapeHTML(data.title)}</div>`;
+        if (data.kind === "advance") {
+          html += `<div class="tooltip-row"><span>Fecha</span><b>${escapeHTML(data.date)}</b></div>`;
+          html += `<div class="tooltip-row"><span>Turno</span><b>${escapeHTML(data.shift)}</b></div>`;
+          html += `<div class="tooltip-row"><span>Equipo</span><b>${escapeHTML(data.equipment)}</b></div>`;
+          if (data.tramoCount > 1) html += `<div class="tooltip-row"><span>Tramos agrupados</span><b>${formatNumber(data.tramoCount, 0)}</b></div>`;
+          html += `<div class="tooltip-row"><span>Tramo</span><b>${formatNumber(data.from)} → ${formatNumber(data.to)} m</b></div>`;
+          html += `<div class="tooltip-row"><span>Avance del turno</span><b>+${formatNumber(data.advance)} m</b></div>`;
+          html += `<div class="tooltip-row"><span>Total del día</span><b>${formatNumber(data.dailyAdvance)} m</b></div>`;
+        } else if (data.kind === "pause") {
+          html += `<div class="tooltip-row"><span>Días sin perforar</span><b>${formatNumber(data.days, 0)}</b></div>`;
+          html += `<div class="tooltip-row"><span>Desde</span><b>${escapeHTML(data.startLabel)}</b></div>`;
+          html += `<div class="tooltip-row"><span>Hasta</span><b>${escapeHTML(data.endLabel)}</b></div>`;
+          html += `<div class="tooltip-row"><span>Último avance</span><b>${escapeHTML(data.previousLabel)}</b></div>`;
+          html += `<div class="tooltip-row"><span>Reinicio</span><b>${escapeHTML(data.nextLabel)}</b></div>`;
+          html += `<div class="tooltip-row"><span>Profundidad de pausa</span><b>${Number.isFinite(data.depth) ? formatNumber(data.depth)+" m" : "Sin dato"}</b></div>`;
+        } else if (data.kind === "crown-group") {
+          html += `<div class="tooltip-row"><span>Equipo</span><b>${escapeHTML(data.equipment)}</b></div>`;
+          html += `<div class="tooltip-row"><span>Profundidad</span><b>${Number.isFinite(data.depth) ? formatNumber(data.depth)+" m" : "Sin dato"}</b></div>`;
+          html += `<div class="tooltip-event-list">${data.events.map((item,index) => `<div class="tooltip-event-item"><div class="tooltip-event-head">Cambio ${index+1}</div><div class="tooltip-row"><span>Fecha</span><b>${escapeHTML(item.dateLabel)}</b></div><div class="tooltip-row"><span>Corona anterior</span><b>${escapeHTML(item.previousCrown)}</b></div><div class="tooltip-row"><span>Corona nueva</span><b>${escapeHTML(item.newCrown)}</b></div><div class="tooltip-row"><span>Metraje registrado</span><b>${formatNumber(item.from)} → ${formatNumber(item.to)} m</b></div></div>`).join("")}</div>`;
+        } else {
+          html += `<div class="tooltip-row"><span>Equipo</span><b>${escapeHTML(data.equipment)}</b></div>`;
+          html += `<div class="tooltip-row"><span>Profundidad</span><b>${Number.isFinite(data.depth) ? formatNumber(data.depth)+" m" : "Sin dato"}</b></div>`;
+          if (data.events.length > 1) html += `<div class="tooltip-row"><span>Duración total</span><b>${escapeHTML(data.totalDuration)}</b></div>`;
+          html += `<div class="tooltip-event-list">${data.events.map((item,index) => `<div class="tooltip-event-item"><div class="tooltip-event-head">Evento ${index+1}</div><div class="tooltip-row"><span>Inicio</span><b>${escapeHTML(item.startLabel)}</b></div><div class="tooltip-row"><span>Fin</span><b>${escapeHTML(item.endLabel)}</b></div><div class="tooltip-row"><span>Duración</span><b>${escapeHTML(item.duration)}</b></div><div class="tooltip-row"><span>Actividad</span><b>${escapeHTML(item.activityCode)} · ${escapeHTML(item.activity)}</b></div>${item.comment ? `<div class="tooltip-comment">${escapeHTML(item.comment)}</div>` : ""}</div>`).join("")}</div>`;
+        }
+        tooltip.innerHTML = html;
+        tooltip.hidden = false;
+        moveTooltip(event);
+      }
+
+      function moveTooltip(event) {
+        const margin = 14;
+        const rect = tooltip.getBoundingClientRect();
+        let x = event.clientX + 14, y = event.clientY + 14;
+        if (x + rect.width > window.innerWidth - margin) x = event.clientX - rect.width - 14;
+        if (y + rect.height > window.innerHeight - margin) y = event.clientY - rect.height - 14;
+        tooltip.style.left = `${Math.max(margin, x)}px`;
+        tooltip.style.top = `${Math.max(margin, y)}px`;
+        tooltip.style.transform = "none";
+      }
+
+      function hideTooltip(immediate = false) {
+        clearTimeout(tooltipHideTimer);
+        if (immediate) tooltip.hidden = true;
+        else tooltipHideTimer = setTimeout(() => { tooltip.hidden = true; }, 140);
+      }
+
+      tooltip.addEventListener("mouseenter", () => clearTimeout(tooltipHideTimer));
+      tooltip.addEventListener("mouseleave", () => hideTooltip(true));
+
+      function renderNotice() {
+        const notice = el("dataNotice");
+        const selectedLabels = state.wellFilters.activities.map(id => ACTIVITY_BY_ID.get(id)?.label).filter(Boolean);
+        if (!selectedLabels.length) {
+          notice.hidden = false;
+          notice.innerHTML = `<strong>Información:</strong><span>Selecciona al menos una actividad para mostrar eventos en los pozos.</span>`;
+          return;
+        }
+        if (!state.filteredEvents.length) {
+          notice.hidden = false;
+          notice.innerHTML = `<strong>Información:</strong><span>No hay registros de ${escapeHTML(selectedLabels.join(", "))} para los filtros seleccionados.</span>`;
+        } else notice.hidden = true;
+      }
+
+      el("resetFilters").addEventListener("click", () => {
+        resetWellFilters();
+        render();
+      });
+
+      el("shiftFilter").addEventListener("click", event => {
+        const button = event.target.closest("button[data-shift]");
+        if (!button) return;
+        state.wellFilters.shift = button.dataset.shift;
+        updateShiftButtons();
+        render();
+      });
+
+      document.addEventListener("change", event => {
+        const select = event.target.closest("select[data-activity-slot]");
+        if (!select) return;
+        const slot = Number(select.dataset.activitySlot);
+        const nextActivity = select.value;
+        if (nextActivity && state.wellFilters.activities.some((activityId, index) => index !== slot && activityId === nextActivity)) return renderActivityFilters();
+        state.wellFilters.activities[slot] = nextActivity;
+        renderActivityFilters();
+        render();
+      });
+
+      el("wellsContainer").addEventListener("click", event => {
+        const trigger = event.target.closest("[data-focus-hole]");
+        if (!trigger) return;
+        openWellFocus(trigger.dataset.focusHole, trigger);
+      });
+
+      el("closeWellFocus").addEventListener("click", () => closeWellFocus());
+      document.addEventListener("keydown", event => {
+        if (event.key === "Escape" && state.focusHole) closeWellFocus();
+      });
+
+      document.querySelectorAll(".tab-button").forEach(button => {
+        button.addEventListener("click", () => {
+          document.querySelectorAll(".tab-button").forEach(item => {
+            const active = item === button;
+            item.classList.toggle("active", active);
+            item.setAttribute("aria-selected", String(active));
+          });
+          document.querySelectorAll(".tab-panel").forEach(panel => panel.hidden = panel.id !== button.dataset.tab);
+          if (button.dataset.tab === "wellsTab") requestAnimationFrame(syncWellScrollbarWidth);
+        });
+      });
+
+      window.addEventListener("resize", syncWellScrollbarWidth);
+
+      function scrollWells(direction) {
+        const grid = document.querySelector(".wells-grid");
+        if (!grid) return;
+        const firstCard = grid.querySelector(".well-card");
+        const step = (firstCard?.getBoundingClientRect().width || grid.clientWidth / 3) + 14;
+        const target = Math.max(0, Math.min(grid.scrollWidth - grid.clientWidth, grid.scrollLeft + direction * step));
+        grid.scrollTo({left:target, behavior:"smooth"});
+      }
+
+      el("wellsPrev").addEventListener("click", () => scrollWells(-1));
+      el("wellsNext").addEventListener("click", () => scrollWells(1));
+
+      fileInput.addEventListener("change", async () => {
+        const file = fileInput.files?.[0];
+        if (!file) return;
+        try { await loadFile(file); }
+        catch (error) {
+          uploadPanel.hidden = false;
+          el("dashboard").hidden = true;
+          setLoading(error.message, true);
+        } finally { fileInput.value = ""; }
+      });
+
+      ["dragenter", "dragover"].forEach(type => uploadPanel.addEventListener(type, event => { event.preventDefault(); uploadPanel.classList.add("dragging"); }));
+      ["dragleave", "drop"].forEach(type => uploadPanel.addEventListener(type, event => { event.preventDefault(); uploadPanel.classList.remove("dragging"); }));
+      uploadPanel.addEventListener("drop", async event => {
+        const file = event.dataTransfer?.files?.[0];
+        if (!file) return;
+        try { await loadFile(file); } catch (error) { setLoading(error.message, true); }
+      });
+
+      document.addEventListener("click", event => {
+        document.querySelectorAll("details.multi[open]").forEach(detail => { if (!detail.contains(event.target)) detail.removeAttribute("open"); });
+      });
+
+      async function tryAutomaticLoad() {
+        if (!/^https?:$/.test(location.protocol)) return;
+        try {
+          setLoading(`Buscando ${AUTO_REPORT_FILE}…`);
+          const response = await fetch(`./${encodeURIComponent(AUTO_REPORT_FILE)}`, {cache:"no-store"});
+          if (!response.ok) throw new Error();
+          const blob = await response.blob();
+          await loadFile(new File([blob], AUTO_REPORT_FILE, {type:blob.type}));
+        } catch (_) {
+          setLoading("No se pudo cargar automáticamente. Selecciona el archivo para continuar.");
+        }
+      }
+
+      tryAutomaticLoad();
+    })();
+  </script>
+</body>
+</html>
