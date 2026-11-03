@@ -541,20 +541,27 @@
     .well-focus-activity-grid .field { min-width: 0; }
     .well-focus-activity-grid select { width: 100%; }
     .well-focus-legend { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding-top: 18px; margin-top: 20px; border-top: 1px solid var(--line); }
-    .well-focus-stage { min-width: 0; overflow: auto; padding: 26px clamp(20px, 4vw, 58px) 60px; }
-    .well-focus-stage-head { display: flex; align-items: center; justify-content: space-between; gap: 18px; max-width: 860px; margin: 0 auto 15px; }
+    .well-focus-stage { --focus-stage-padding: 26px; min-width: 0; overflow: auto; padding: var(--focus-stage-padding) clamp(20px, 3vw, 44px); }
+    .well-focus-stage-head { display: flex; align-items: center; justify-content: space-between; gap: 18px; max-width: 1320px; margin: 0 auto 15px; }
     .well-focus-stage-head strong { color: #294658; font-size: .85rem; }
     .well-focus-stage-head span { color: var(--muted); font-size: .72rem; }
-    .well-focus-chart { display: flex; justify-content: center; align-items: flex-start; min-height: 100%; }
+    .well-focus-layout { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: 20px; max-width: 1320px; margin: 0 auto; }
+    .well-focus-layout.has-crown-history { grid-template-columns: minmax(240px, 1fr) minmax(300px, .95fr); }
+    .well-focus-chart-panel { min-width: 0; width: 100%; max-width: 860px; margin: 0 auto; }
+    .well-focus-chart { display: flex; justify-content: center; align-items: flex-start; min-width: 0; }
     .well-focus-chart .well-card { width: min(860px, 100%); flex: 0 0 auto; padding: 20px; box-shadow: var(--shadow); }
     .well-focus-chart .well-card:hover { border-color: var(--line); }
     .well-focus-chart .well-svg { height: auto; aspect-ratio: 520 / 1400; }
     .well-focus-chart .well-head { margin-bottom: 12px; }
     .well-focus-chart .well-name { font-size: 1.15rem; }
     .well-focus-chart .well-equipment { font-size: 1.02rem; }
-    .crown-history { max-width: 860px; margin: 0 auto 18px; }
+    .crown-history { position: sticky; top: 0; display: flex; flex-direction: column; min-width: 0; max-height: calc(100dvh - var(--focus-stage-padding) - var(--focus-stage-padding)); margin: 0; box-shadow: var(--shadow); }
     .crown-history[hidden] { display: none; }
-    .crown-history table { min-width: 520px; }
+    .crown-history .section-head { flex: 0 0 auto; padding: 15px; }
+    .crown-history .table-scroll { min-height: 0; max-height: none; }
+    .crown-history table { min-width: 390px; }
+    .crown-history th, .crown-history td { padding: 10px; }
+    .crown-history th:not(:first-child), .crown-history td:not(:first-child) { white-space: nowrap; }
     .crown-history-meta { display: block; margin-top: 3px; color: var(--muted); font-size: .7rem; }
 
     @media (max-width: 1180px) {
@@ -576,7 +583,10 @@
       .well-card { flex-basis: 100%; }
       .well-focus-view { grid-template-columns: minmax(205px, 42vw) minmax(360px, 1fr); }
       .well-focus-sidebar { padding: 16px 13px; }
-      .well-focus-stage { padding: 18px 16px 46px; }
+      .well-focus-stage { --focus-stage-padding: 18px; padding: var(--focus-stage-padding) 16px; }
+      .well-focus-layout.has-crown-history { display: flex; flex-direction: column; }
+      .well-focus-layout.has-crown-history .well-focus-chart { width: 100%; }
+      .crown-history { order: -1; z-index: 3; width: 100%; max-height: 42dvh; }
     }
 
     @media (max-width: 620px) {
@@ -726,23 +736,27 @@
       <div class="well-focus-legend" id="focusActivityLegend" aria-label="Actividades visibles"></div>
     </aside>
     <div class="well-focus-stage" id="wellFocusStage">
-      <div class="well-focus-stage-head"><strong>Perfil ampliado del sondaje</strong><span>Desplázate verticalmente o utiliza el zoom del navegador para revisar detalles.</span></div>
-      <section class="crown-history section-card card" id="crownHistory" aria-labelledby="crownHistoryTitle" hidden>
-        <div class="section-head">
-          <div>
-            <h2 id="crownHistoryTitle">Historial de coronas</h2>
-            <p>Orden cronológico según Perforación y los filtros de equipo y turno. Duración: metros perforados acumulados por uso.</p>
-            <p>Sin reemplazo registrado: Hasta indica la última profundidad registrada, sin confirmar el retiro de la corona.</p>
+      <div class="well-focus-layout" id="wellFocusLayout">
+        <div class="well-focus-chart-panel">
+          <div class="well-focus-stage-head"><strong>Perfil ampliado del sondaje</strong><span>Desplázate verticalmente o utiliza el zoom del navegador para revisar detalles.</span></div>
+          <div class="well-focus-chart" id="focusedWellContainer"></div>
+        </div>
+        <section class="crown-history section-card card" id="crownHistory" aria-labelledby="crownHistoryTitle" hidden>
+          <div class="section-head">
+            <div>
+              <h2 id="crownHistoryTitle">Historial de coronas</h2>
+              <p>Orden cronológico según Perforación y los filtros de equipo y turno. Duración: metros perforados acumulados por uso.</p>
+              <p>Hasta indica la última profundidad registrada para cada uso de la corona.</p>
+            </div>
           </div>
-        </div>
-        <div class="table-scroll">
-          <table>
-            <thead><tr><th scope="col">Corona</th><th scope="col">Desde</th><th scope="col">Hasta</th><th scope="col">Duración</th><th scope="col">Cambiada por</th></tr></thead>
-            <tbody id="crownHistoryBody"></tbody>
-          </table>
-        </div>
-      </section>
-      <div class="well-focus-chart" id="focusedWellContainer"></div>
+          <div class="table-scroll" tabindex="0" role="region" aria-label="Tabla del historial de coronas">
+            <table>
+              <thead><tr><th scope="col">Corona</th><th scope="col">Desde</th><th scope="col">Hasta</th><th scope="col">Duración</th><th scope="col">Diámetro</th></tr></thead>
+              <tbody id="crownHistoryBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
     </div>
   </section>
 
@@ -797,6 +811,7 @@
         from: ["desde"],
         to: ["hasta"],
         crown: ["corona"],
+        diameter: ["diametro", "diameter"],
         finish: ["esfinpozo", "finpozo"],
         equipment: ["equipo"],
         reportStatus: ["estadoreporte"]
@@ -973,8 +988,7 @@
           let run = previousByWellEquipment.get(sequenceKey);
           if (!run || run.crownId.toLocaleUpperCase("es-CL") !== crownId.toLocaleUpperCase("es-CL")) {
             const previousCrown = run?.crownId || "";
-            if (run) run.replacedBy = crownId;
-            run = {crownId, previousCrown, replacedBy:"", rows:[]};
+            run = {crownId, previousCrown, rows:[]};
             runs.push(run);
             previousByWellEquipment.set(sequenceKey, run);
           }
@@ -1056,6 +1070,7 @@
             hole,
             shift:d.shift !== undefined ? clean(source[d.shift], "Sin turno") : "Sin turno",
             crownId:d.crown !== undefined ? clean(source[d.crown], "") : "",
+            diameter:d.diameter !== undefined ? clean(source[d.diameter], "").toUpperCase() : "",
             from,
             to,
             advance:Math.max(0, to - from),
@@ -1442,6 +1457,7 @@
         const body = el("crownHistoryBody");
         const crownSelected = [...el("focusActivityFilters").querySelectorAll("select")].some(select => select.value === "crown-change");
         section.hidden = !state.focusHole || !crownSelected;
+        el("wellFocusLayout").classList.toggle("has-crown-history", !section.hidden);
         body.innerHTML = "";
         if (section.hidden) return;
         // Agrupa antes de filtrar turnos: ocultar un cambio intermedio no debe fusionar dos usos de la misma corona.
@@ -1454,7 +1470,8 @@
           const first = run.rows[0];
           const last = run.rows[run.rows.length - 1];
           const duration = run.rows.reduce((total, row) => total + row.advance, 0);
-          return `<tr><td><strong>${escapeHTML(run.crownId)}</strong><span class="crown-history-meta">${escapeHTML(first.equipment)} · ${formatDate(first.date)} – ${formatDate(last.date)}</span></td><td>${formatNumber(first.from)} m</td><td>${formatNumber(last.to)} m</td><td>${formatNumber(duration)} m</td><td>${escapeHTML(run.replacedBy || "Sin reemplazo registrado")}</td></tr>`;
+          const diameters = unique(run.rows.map(row => row.diameter).filter(Boolean)).join(" · ") || "Sin dato";
+          return `<tr><td><strong>${escapeHTML(run.crownId)}</strong><span class="crown-history-meta">${escapeHTML(first.equipment)} · ${formatDate(first.date)} – ${formatDate(last.date)}</span></td><td>${formatNumber(first.from)} m</td><td>${formatNumber(last.to)} m</td><td>${formatNumber(duration)} m</td><td>${escapeHTML(diameters)}</td></tr>`;
         }).join("");
       }
 
@@ -1478,6 +1495,7 @@
         state.focusHole = "";
         el("wellFocusView").hidden = true;
         el("crownHistory").hidden = true;
+        el("wellFocusLayout").classList.remove("has-crown-history");
         document.body.classList.remove("focus-open");
         renderActivityFilters();
         const fallbackTrigger = [...document.querySelectorAll("[data-focus-hole]")].find(trigger => trigger.dataset.focusHole === closingHole);
