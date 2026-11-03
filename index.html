@@ -552,6 +552,10 @@
     .well-focus-chart .well-head { margin-bottom: 12px; }
     .well-focus-chart .well-name { font-size: 1.15rem; }
     .well-focus-chart .well-equipment { font-size: 1.02rem; }
+    .crown-history { max-width: 860px; margin: 0 auto 18px; }
+    .crown-history[hidden] { display: none; }
+    .crown-history table { min-width: 520px; }
+    .crown-history-meta { display: block; margin-top: 3px; color: var(--muted); font-size: .7rem; }
 
     @media (max-width: 1180px) {
       .filter-grid { grid-template-columns: repeat(3, 1fr); }
@@ -723,6 +727,21 @@
     </aside>
     <div class="well-focus-stage" id="wellFocusStage">
       <div class="well-focus-stage-head"><strong>Perfil ampliado del sondaje</strong><span>Desplázate verticalmente o utiliza el zoom del navegador para revisar detalles.</span></div>
+      <section class="crown-history section-card card" id="crownHistory" aria-labelledby="crownHistoryTitle" hidden>
+        <div class="section-head">
+          <div>
+            <h2 id="crownHistoryTitle">Historial de coronas</h2>
+            <p>Orden cronológico según Perforación y los filtros de equipo y turno. Duración: metros perforados acumulados por uso.</p>
+            <p>Sin reemplazo registrado: Hasta indica la última profundidad registrada, sin confirmar el retiro de la corona.</p>
+          </div>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th scope="col">Corona</th><th scope="col">Desde</th><th scope="col">Hasta</th><th scope="col">Duración</th><th scope="col">Cambiada por</th></tr></thead>
+            <tbody id="crownHistoryBody"></tbody>
+          </table>
+        </div>
+      </section>
       <div class="well-focus-chart" id="focusedWellContainer"></div>
     </div>
   </section>
@@ -761,7 +780,7 @@
         {id:"wait-fuel", label:"Espera combustible", codes:["10.14"], aliases:["espera combustible", "espera de combustible"], icon:"⛽", color:"#65a30d", soft:"#ecfccb"}
       ];
       const ACTIVITY_BY_ID = new Map(ACTIVITY_CATALOG.map(activity => [activity.id, activity]));
-      const state = { rows: [], events: [], filtered: [], filteredEvents: [], projectCode: "", drillingColumns: {}, detailColumns: {}, focusHole:"", wellFilters: {equipment:new Set(), shift:"all", activities:["tool-movement", "", ""]} };
+      const state = { rows: [], events: [], crownRuns: [], filtered: [], filteredEvents: [], projectCode: "", drillingColumns: {}, detailColumns: {}, focusHole:"", wellFilters: {equipment:new Set(), shift:"all", activities:["tool-movement", "", ""]} };
 
       const el = id => document.getElementById(id);
       const uploadPanel = el("uploadPanel");
@@ -944,48 +963,59 @@
         return value === true || value === 1 || /^(?:1|si|sí|true|x|finalizado)$/i.test(String(value ?? "").trim());
       }
 
-      function buildCrownChangeEvents(rows) {
-        const crownDefinition = ACTIVITY_BY_ID.get("crown-change");
+      function buildCrownRuns(rows) {
         const previousByWellEquipment = new Map();
-        const events = [];
+        const runs = [];
         [...rows].sort((a,b) => a.date - b.date || a.sourceRow - b.sourceRow).forEach(row => {
           const crownId = String(row.crownId ?? "").trim();
           if (!crownId) return;
           const sequenceKey = `${normalize(row.hole)}\u0000${normalize(row.equipment)}`;
-          const previous = previousByWellEquipment.get(sequenceKey);
-          if (previous && previous.crownId.toLocaleUpperCase("es-CL") !== crownId.toLocaleUpperCase("es-CL")) {
-            events.push({
-              id:`crown-${row.id}`,
-              source:"perforacion-corona",
-              sourceRow:row.sourceRow,
-              date:row.date,
-              dateKey:row.dateKey,
-              projectCode:row.projectCode,
-              equipment:row.equipment,
-              hole:row.hole,
-              shift:row.shift,
-              activityId:crownDefinition.id,
-              activityLabel:crownDefinition.label,
-              activityCode:"CORONA",
-              activity:"Cambio de Corona",
-              comments:"",
-              start:null,
-              end:null,
-              startLabel:"",
-              endLabel:"",
-              durationMinutes:null,
-              duration:"No informada",
-              depth:row.from,
-              dateLabel:formatDate(row.date, true),
-              previousCrown:previous.crownId,
-              newCrown:crownId,
-              from:row.from,
-              to:row.to
-            });
+          let run = previousByWellEquipment.get(sequenceKey);
+          if (!run || run.crownId.toLocaleUpperCase("es-CL") !== crownId.toLocaleUpperCase("es-CL")) {
+            const previousCrown = run?.crownId || "";
+            if (run) run.replacedBy = crownId;
+            run = {crownId, previousCrown, replacedBy:"", rows:[]};
+            runs.push(run);
+            previousByWellEquipment.set(sequenceKey, run);
           }
-          previousByWellEquipment.set(sequenceKey, {crownId, row});
+          run.rows.push(row);
         });
-        return events;
+        return runs;
+      }
+
+      function buildCrownChangeEvents(runs) {
+        const crownDefinition = ACTIVITY_BY_ID.get("crown-change");
+        return runs.filter(run => run.previousCrown).map(run => {
+          const row = run.rows[0];
+          return {
+            id:`crown-${row.id}`,
+            source:"perforacion-corona",
+            sourceRow:row.sourceRow,
+            date:row.date,
+            dateKey:row.dateKey,
+            projectCode:row.projectCode,
+            equipment:row.equipment,
+            hole:row.hole,
+            shift:row.shift,
+            activityId:crownDefinition.id,
+            activityLabel:crownDefinition.label,
+            activityCode:"CORONA",
+            activity:"Cambio de Corona",
+            comments:"",
+            start:null,
+            end:null,
+            startLabel:"",
+            endLabel:"",
+            durationMinutes:null,
+            duration:"No informada",
+            depth:row.from,
+            dateLabel:formatDate(row.date, true),
+            previousCrown:run.previousCrown,
+            newCrown:run.crownId,
+            from:row.from,
+            to:row.to
+          };
+        });
       }
 
       function parseWorkbook(buffer, fileName) {
@@ -1036,7 +1066,8 @@
         rows.sort((a,b) => a.date - b.date || a.hole.localeCompare(b.hole, "es", {numeric:true}) || a.sourceRow - b.sourceRow);
 
         const t = detailMatch.map;
-        const events = buildCrownChangeEvents(rows);
+        const crownRuns = buildCrownRuns(rows);
+        const events = buildCrownChangeEvents(crownRuns);
         for (let index = detailMatch.index + 1; index < detailMatrix.length; index++) {
           const source = detailMatrix[index];
           if (!source || source.every(value => value == null || String(value).trim() === "")) continue;
@@ -1085,7 +1116,7 @@
         });
         events.sort((a,b) => (a.start?.getTime() ?? a.date.getTime()) - (b.start?.getTime() ?? b.date.getTime()) || a.sourceRow - b.sourceRow);
         const projectCode = rows.find(row => row.projectCode)?.projectCode || events.find(event => event.projectCode)?.projectCode || "Proyecto sin código";
-        return {rows, events, projectCode, drillingColumns:d, detailColumns:t, fileName};
+        return {rows, events, crownRuns, projectCode, drillingColumns:d, detailColumns:t, fileName};
       }
 
       async function loadFile(file) {
@@ -1105,6 +1136,7 @@
         closeWellFocus(false);
         state.rows = parsed.rows;
         state.events = parsed.events;
+        state.crownRuns = parsed.crownRuns;
         state.projectCode = parsed.projectCode;
         state.drillingColumns = parsed.drillingColumns;
         state.detailColumns = parsed.detailColumns;
@@ -1181,17 +1213,27 @@
       }
 
       function renderActivityFilters() {
-        const selected = state.wellFilters.activities.filter(Boolean);
-        const counts = new Map(ACTIVITY_CATALOG.map(activity => [activity.id, state.events.filter(event => event.activityId === activity.id).length]));
-        document.querySelectorAll("select[data-activity-slot]").forEach(select => {
-          const slot = Number(select.dataset.activitySlot);
-          const current = state.wellFilters.activities[slot] || "";
-          const usedElsewhere = new Set(selected.filter(id => id !== current));
-          select.innerHTML = `<option value="">Sin actividad</option>${ACTIVITY_CATALOG.map(activity => `<option value="${activity.id}"${activity.id === current ? " selected" : ""}${usedElsewhere.has(activity.id) ? " disabled" : ""}>${activity.icon} ${activity.label} (${counts.get(activity.id) || 0})</option>`).join("")}`;
+        const events = scopedActivityEvents();
+        const scopes = [
+          {root:el("activityFilters"), legend:el("activityLegend"), events},
+          {root:el("focusActivityFilters"), legend:el("focusActivityLegend"), events:events.filter(event => event.hole === state.focusHole)}
+        ];
+        scopes.forEach(scope => {
+          const counts = new Map();
+          scope.events.forEach(event => counts.set(event.activityId, (counts.get(event.activityId) || 0) + 1));
+          const available = ACTIVITY_CATALOG.filter(activity => counts.has(activity.id));
+          // Conserva la selección original para recuperarla al ampliar el alcance de los filtros.
+          const selected = state.wellFilters.activities.map(id => counts.has(id) ? id : "");
+          scope.root.querySelectorAll("select[data-activity-slot]").forEach(select => {
+            const slot = Number(select.dataset.activitySlot);
+            const current = selected[slot];
+            const usedElsewhere = new Set(selected.filter((id, index) => id && index !== slot));
+            select.innerHTML = `<option value="">Sin actividad</option>${available.map(activity => `<option value="${activity.id}"${usedElsewhere.has(activity.id) ? " disabled" : ""}>${activity.icon} ${activity.label} (${counts.get(activity.id)})</option>`).join("")}`;
+            select.value = current;
+          });
+          const activeDefinitions = selected.map(id => ACTIVITY_BY_ID.get(id)).filter(Boolean);
+          scope.legend.innerHTML = activeDefinitions.length ? activeDefinitions.map(activity => `<span class="legend-item"><i class="legend-event" style="color:${activity.color};background:${activity.soft};border:1px solid ${activity.color}55">${activity.icon}</i>${escapeHTML(activity.label)}</span>`).join("") : `<span class="legend-item">Sin actividades seleccionadas</span>`;
         });
-        const activeDefinitions = state.wellFilters.activities.map(id => ACTIVITY_BY_ID.get(id)).filter(Boolean);
-        const legendHTML = activeDefinitions.length ? activeDefinitions.map(activity => `<span class="legend-item"><i class="legend-event" style="color:${activity.color};background:${activity.soft};border:1px solid ${activity.color}55">${activity.icon}</i>${escapeHTML(activity.label)}</span>`).join("") : `<span class="legend-item">Sin actividades seleccionadas</span>`;
-        [el("activityLegend"), el("focusActivityLegend")].filter(Boolean).forEach(legend => { legend.innerHTML = legendHTML; });
       }
 
       function matchesSelectedShift(shift) {
@@ -1202,12 +1244,17 @@
         return state.rows.filter(row => state.wellFilters.equipment.has(row.equipment) && matchesSelectedShift(row.shift));
       }
 
+      function scopedActivityEvents() {
+        return state.events.filter(event => state.wellFilters.equipment.has(event.equipment) && matchesSelectedShift(event.shift));
+      }
+
       function dimensionFilteredEvents() {
         const selectedActivities = new Set(state.wellFilters.activities.filter(Boolean));
-        return state.events.filter(event => selectedActivities.has(event.activityId) && state.wellFilters.equipment.has(event.equipment) && matchesSelectedShift(event.shift));
+        return scopedActivityEvents().filter(event => selectedActivities.has(event.activityId));
       }
 
       function render() {
+        renderActivityFilters();
         state.filtered = dimensionFilteredRows();
         state.filteredEvents = dimensionFilteredEvents();
         renderWells();
@@ -1366,6 +1413,7 @@
         if (!state.focusHole || el("wellFocusView").hidden) return;
         const previousScrollTop = stage.scrollTop;
         const rows = dimensionFilteredRows().filter(row => row.hole === state.focusHole);
+        renderCrownHistory();
         if (!rows.length) {
           container.innerHTML = `<div class="empty-state"><strong>Sondaje no disponible</strong>El sondaje ya no forma parte de los filtros seleccionados.</div>`;
           return;
@@ -1389,6 +1437,27 @@
         requestAnimationFrame(() => { stage.scrollTop = previousScrollTop; });
       }
 
+      function renderCrownHistory() {
+        const section = el("crownHistory");
+        const body = el("crownHistoryBody");
+        const crownSelected = [...el("focusActivityFilters").querySelectorAll("select")].some(select => select.value === "crown-change");
+        section.hidden = !state.focusHole || !crownSelected;
+        body.innerHTML = "";
+        if (section.hidden) return;
+        // Agrupa antes de filtrar turnos: ocultar un cambio intermedio no debe fusionar dos usos de la misma corona.
+        const history = state.crownRuns.flatMap(run => {
+          const rows = run.rows.filter(row => row.hole === state.focusHole && state.wellFilters.equipment.has(row.equipment) && matchesSelectedShift(row.shift));
+          if (!rows.length) return [];
+          return [{...run, rows}];
+        }).sort((a,b) => a.rows[0].date - b.rows[0].date || a.rows[0].sourceRow - b.rows[0].sourceRow);
+        body.innerHTML = history.map(run => {
+          const first = run.rows[0];
+          const last = run.rows[run.rows.length - 1];
+          const duration = run.rows.reduce((total, row) => total + row.advance, 0);
+          return `<tr><td><strong>${escapeHTML(run.crownId)}</strong><span class="crown-history-meta">${escapeHTML(first.equipment)} · ${formatDate(first.date)} – ${formatDate(last.date)}</span></td><td>${formatNumber(first.from)} m</td><td>${formatNumber(last.to)} m</td><td>${formatNumber(duration)} m</td><td>${escapeHTML(run.replacedBy || "Sin reemplazo registrado")}</td></tr>`;
+        }).join("");
+      }
+
       function openWellFocus(hole, trigger = null) {
         if (!hole) return;
         state.focusHole = hole;
@@ -1408,7 +1477,9 @@
         hideTooltip(true);
         state.focusHole = "";
         el("wellFocusView").hidden = true;
+        el("crownHistory").hidden = true;
         document.body.classList.remove("focus-open");
+        renderActivityFilters();
         const fallbackTrigger = [...document.querySelectorAll("[data-focus-hole]")].find(trigger => trigger.dataset.focusHole === closingHole);
         if (restoreFocus) (focusReturnElement?.isConnected ? focusReturnElement : fallbackTrigger)?.focus();
         focusReturnElement = null;
@@ -1696,7 +1767,6 @@
         const nextActivity = select.value;
         if (nextActivity && state.wellFilters.activities.some((activityId, index) => index !== slot && activityId === nextActivity)) return renderActivityFilters();
         state.wellFilters.activities[slot] = nextActivity;
-        renderActivityFilters();
         render();
       });
 
